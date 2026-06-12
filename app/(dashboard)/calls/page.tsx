@@ -48,27 +48,35 @@ export default function CallsPage() {
   };
 
   const columns = useMemo<Column<CallLog>[]>(() => [
-    { key: "type", label: "Type", render: (c) => (
-      <div className="flex items-center gap-2">{typeIcon(c.type)}<span className="text-sm capitalize font-medium text-slate-700">{c.type}</span></div>
-    )},
-    { key: "contactName", label: "Contact", sortable: true, render: (c) => (
-      <div><p className="text-sm font-medium text-slate-800">{c.contactName}</p>{c.contactPhone && <p className="text-xs text-slate-400">{c.contactPhone}</p>}</div>
-    )},
-    { key: "direction", label: "Direction", render: (c) => (
-      <div className="flex items-center gap-1.5">
-        {c.direction === "inbound" ? <ArrowDownLeft className="w-3.5 h-3.5 text-blue-500" /> : <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500" />}
-        <span className="text-sm text-slate-600 capitalize">{c.direction}</span>
-      </div>
-    )},
+    {
+      key: "type", label: "Type", render: (c) => (
+        <div className="flex items-center gap-2">{typeIcon(c.type)}<span className="text-sm capitalize font-medium text-slate-700">{c.type}</span></div>
+      )
+    },
+    {
+      key: "contactName", label: "Contact", sortable: true, render: (c) => (
+        <div><p className="text-sm font-medium text-slate-800">{c.contactName}</p>{c.contactPhone && <p className="text-xs text-slate-400">{c.contactPhone}</p>}</div>
+      )
+    },
+    {
+      key: "direction", label: "Direction", render: (c) => (
+        <div className="flex items-center gap-1.5">
+          {c.direction === "inbound" ? <ArrowDownLeft className="w-3.5 h-3.5 text-blue-500" /> : <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500" />}
+          <span className="text-sm text-slate-600 capitalize">{c.direction}</span>
+        </div>
+      )
+    },
     { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
     { key: "duration", label: "Duration", render: (c) => <span className="text-sm text-slate-600">{c.duration ? `${Math.floor(c.duration / 60)}m ${c.duration % 60}s` : "—"}</span> },
     { key: "date", label: "Date", render: (c) => <span className="text-sm text-slate-500">{formatDate(c.date as Date)}</span> },
-    { key: "actions", label: "", render: (c) => (
-      <div className="flex items-center gap-1">
-        <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-        <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-      </div>
-    )},
+    {
+      key: "actions", label: "", render: (c) => (
+        <div className="flex items-center gap-1">
+          <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+        </div>
+      )
+    },
   ], []);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading call logs..." />;
@@ -82,8 +90,15 @@ export default function CallsPage() {
           </button>
         ))}
       </div>
-      <DataTable columns={columns} data={filtered as unknown as Record<string, unknown>[]} searchKeys={["contactName", "contactPhone", "notes"]} searchPlaceholder="Search calls..."
-        actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Log Call</button>} />
+
+      {/* FIX: Explicitly cast columns and data array properties to bypass the strict Record generic enforcement */}
+      <DataTable
+        columns={columns as any[]}
+        data={filtered as any[]}
+        searchKeys={["contactName", "contactPhone", "notes"]}
+        searchPlaceholder="Search calls..."
+        actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Log Call</button>}
+      />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Log" : "Log Call/Message"}
         footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button><button onClick={handleSave} className="btn-primary">Save</button></>}>
