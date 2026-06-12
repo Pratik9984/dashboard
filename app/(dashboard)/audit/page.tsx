@@ -13,14 +13,21 @@ export default function AuditPage() {
   const { add, remove } = useFirestore("audits");
   const [showModal, setShowModal] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [form, setForm] = useState({ summary: "", mood: "good" as AuditEntry["mood"], items: [{ id: "1", category: "Development", description: "", completed: false, notes: "", time: "" }] as AuditItem[] });
+  const [form, setForm] = useState({
+    summary: "",
+    mood: "good" as AuditEntry["mood"],
+    items: [{ id: "1", category: "Development", description: "", completed: false, notes: "", time: "" }] as AuditItem[]
+  });
 
   const addItem = () => setForm({ ...form, items: [...form.items, { id: Date.now().toString(), category: "General", description: "", completed: false, notes: "", time: "" }] });
+
+  // FIX: Cast element to 'any' to safely allow dynamic bracket notation assignments
   const updateItem = (idx: number, field: string, value: string | boolean) => {
     const items = [...form.items];
-    (items[idx] as Record<string, unknown>)[field] = value;
+    (items[idx] as any)[field] = value;
     setForm({ ...form, items });
   };
+
   const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
 
   const handleSave = async () => {
