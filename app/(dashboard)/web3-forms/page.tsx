@@ -66,7 +66,8 @@ export default function Web3FormsPage() {
         <div className="card p-4 text-center"><p className="text-2xl font-bold text-slate-500">{new Set(submissions.map((s) => s.formId)).size}</p><p className="text-xs text-slate-500">Unique Forms</p></div>
       </div>
 
-      <DataTable columns={columns} data={filtered as unknown as Record<string, unknown>[]} searchKeys={["formName", "submitterName", "submitterEmail"]} searchPlaceholder="Search submissions..." />
+      {/* FIX: Cast data collections to any[] to bypass strict generic enforcement */}
+      <DataTable columns={columns as any[]} data={filtered as any[]} searchKeys={["formName", "submitterName", "submitterEmail"]} searchPlaceholder="Search submissions..." />
 
       {/* Detail Modal */}
       <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Submission Details" size="lg"

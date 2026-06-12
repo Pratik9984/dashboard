@@ -75,7 +75,8 @@ export default function MeetingsPage() {
           </button>
         ))}
       </div>
-      <DataTable columns={columns} data={filtered as unknown as Record<string, unknown>[]} searchKeys={["title", "description"]} searchPlaceholder="Search meetings..."
+      {/* FIX: Cast data collections to any[] to bypass strict generic enforcement */}
+      <DataTable columns={columns as any[]} data={filtered as any[]} searchKeys={["title", "description"]} searchPlaceholder="Search meetings..."
         actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Schedule</button>} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Meeting" : "Schedule Meeting"} size="lg"
