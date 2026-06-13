@@ -27,7 +27,16 @@ export default function TeamPage() {
     phone: string;
     bio: string;
     skills: string;
-  }>({ name: "", email: "", role: "member", department: "", position: "", phone: "", bio: "", skills: "" });
+  }>({
+    name: "",
+    email: "",
+    role: "member",
+    department: "",
+    position: "",
+    phone: "",
+    bio: "",
+    skills: "",
+  });
 
   const openAdd = () => { setEditing(null); setForm({ name: "", email: "", role: "member", department: "", position: "", phone: "", bio: "", skills: "" }); setShowModal(true); };
   const openEdit = (m: TeamMember) => { setEditing(m); setForm({ name: m.name, email: m.email, role: m.role, department: m.department, position: m.position, phone: m.phone || "", bio: m.bio || "", skills: m.skills.join(", ") }); setShowModal(true); };

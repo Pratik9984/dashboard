@@ -338,7 +338,7 @@ export default function SheetsPage() {
 
       toast.success(`Successfully transferred ${successCount} records into the "${sheet.type}" database collection!`, { id: toastId });
       if (failCount > 0) {
-        toast.warn(`Failed to parse ${failCount} rows.`);
+        toast(`⚠️ Failed to parse ${failCount} rows.`, { icon: '⚠️' });
       }
     } catch (err: any) {
       console.error(err);
