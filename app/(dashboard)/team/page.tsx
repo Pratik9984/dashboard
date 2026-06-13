@@ -39,7 +39,7 @@ export default function TeamPage() {
   });
 
   const openAdd = () => { setEditing(null); setForm({ name: "", email: "", role: "member", department: "", position: "", phone: "", bio: "", skills: "" }); setShowModal(true); };
-  const openEdit = (m: TeamMember) => { setEditing(m); setForm({ name: m.name, email: m.email, role: m.role, department: m.department, position: m.position, phone: m.phone || "", bio: m.bio || "", skills: m.skills.join(", ") }); setShowModal(true); };
+  const openEdit = (m: TeamMember) => { setEditing(m); setForm({ name: m.name, email: m.email, role: m.role, department: m.department, position: m.position, phone: m.phone || "", bio: m.bio || "", skills: m.skills?.join(", ") || "" }); setShowModal(true); };
 
   const handleSave = async () => {
     try {
@@ -133,7 +133,7 @@ export default function TeamPage() {
                   </span>
                   <StatusBadge status={m.isActive ? "active" : "inactive"} />
                 </div>
-                {m.skills.length > 0 && (
+                {m.skills && m.skills.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-3">
                     {m.skills.slice(0, 4).map((s, i) => (
                       <span key={i} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-md">{s}</span>
@@ -161,11 +161,13 @@ export default function TeamPage() {
                 onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
                 disabled={editing?.id === currentUserProfile?.id}
               >
-                {form.role !== "admin" && form.role !== "member" && (
-                  <option value={form.role}>{form.role.charAt(0).toUpperCase() + form.role.slice(1)}</option>
+                {currentUserProfile?.role === "owner" && (
+                  <option value="owner">Owner</option>
                 )}
                 <option value="admin">Admin</option>
+                <option value="manager">Manager</option>
                 <option value="member">Member</option>
+                <option value="viewer">Viewer</option>
               </select>
             </div>
             <div><label className="label">Department</label><input className="input-field" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>

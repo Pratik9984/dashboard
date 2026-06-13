@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, PhoneCall, PhoneIncoming, PhoneOutgoing, MessageSquare, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { CallLog } from "@/app/types";
+import { CallLog, Project } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 
 export default function CallsPage() {
   const { data: calls, loading } = useCollection<CallLog>("calls");
+  const { data: projects } = useCollection<Project>("projects");
   const { add, update, remove } = useFirestore("calls");
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
@@ -50,7 +51,25 @@ export default function CallsPage() {
     try { await remove(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
 
-  const filtered = filter === "all" ? calls : calls.filter((c) => c.type === filter);
+  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const userCalls = useMemo(() => {
+    if (!isMemberOrViewer) return calls;
+
+    const assignedClientNames = new Set(
+      projects
+        .filter((p) => p.assignees?.includes(currentUserProfile?.id || "") || p.createdBy === currentUserProfile?.id)
+        .map((p) => p.clientName?.toLowerCase().trim())
+    );
+
+    return calls.filter((c) => {
+      const isRecordedByMe = c.recordedBy?.toLowerCase() === currentUserProfile?.name?.toLowerCase() ||
+                             c.recordedBy?.toLowerCase() === currentUserProfile?.email?.toLowerCase();
+      const isRelatedToMyClient = assignedClientNames.has(c.contactName?.toLowerCase().trim());
+      return isRecordedByMe || isRelatedToMyClient;
+    });
+  }, [calls, projects, isMemberOrViewer, currentUserProfile]);
+
+  const filtered = filter === "all" ? userCalls : userCalls.filter((c) => c.type === filter);
 
   const typeIcon = (type: string) => {
     switch (type) {

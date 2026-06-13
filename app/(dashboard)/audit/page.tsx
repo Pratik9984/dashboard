@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { Plus, Check, Trash2, Smile, Meh, Frown, Heart, ChevronDown, ChevronRight } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { AuditEntry, AuditItem } from "@/app/types";
+import { AuditEntry, AuditItem, TeamMember } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 
 export default function AuditPage() {
   const { data: audits, loading } = useCollection<AuditEntry>("audits");
+  const { data: members } = useCollection<TeamMember>("users");
   const { add, remove } = useFirestore("audits");
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
@@ -84,17 +85,20 @@ export default function AuditPage() {
         <EmptyState title="No audit entries" message="Start your daily audit to track work and progress." action={canAdd ? <button onClick={() => setShowModal(true)} className="btn-primary"><Plus className="w-4 h-4" /> Create Audit</button> : undefined} />
       ) : (
         <div className="space-y-3">
-          {visibleAudits.sort((a, b) => b.date.localeCompare(a.date)).map((audit) => (
-            <div key={audit.id} className="card overflow-hidden">
-              <div className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => setExpanded(expanded === audit.id ? null : audit.id)}>
-                {expanded === audit.id ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <p className="text-sm font-semibold text-slate-800">{audit.date}</p>
-                    {moodIcon(audit.mood)}
+          {visibleAudits.sort((a, b) => b.date.localeCompare(a.date)).map((audit) => {
+            const creator = members.find((m) => m.id === audit.createdBy);
+            return (
+              <div key={audit.id} className="card overflow-hidden">
+                <div className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => setExpanded(expanded === audit.id ? null : audit.id)}>
+                  {expanded === audit.id ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm font-semibold text-slate-800">{audit.date}</p>
+                      {creator && <span className="text-[10px] font-semibold bg-indigo-50 border border-indigo-150 text-indigo-700 px-2 py-0.5 rounded-md">👤 {creator.name}</span>}
+                      {moodIcon(audit.mood)}
+                    </div>
+                    {audit.summary && <p className="text-xs text-slate-500 mt-0.5">{audit.summary}</p>}
                   </div>
-                  {audit.summary && <p className="text-xs text-slate-500 mt-0.5">{audit.summary}</p>}
-                </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -128,7 +132,8 @@ export default function AuditPage() {
                 </div>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 

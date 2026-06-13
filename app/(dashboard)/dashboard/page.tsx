@@ -19,18 +19,18 @@ export default function DashboardPage() {
   if (loading) return <LoadingSpinner size="lg" message="Loading dashboard..." />;
 
   const kpis = [
-    { label: "Total Projects", value: stats.totalProjects, icon: <FolderKanban className="w-5 h-5" />, color: "primary", trend: { value: 12, label: "this month" } },
-    { label: "Active Projects", value: stats.activeProjects, icon: <Zap className="w-5 h-5" />, color: "amber", trend: { value: 8, label: "vs last month" } },
+    { label: "Total Projects", value: stats.totalProjects, icon: <FolderKanban className="w-5 h-5" />, color: "primary" },
+    { label: "Active Projects", value: stats.activeProjects, icon: <Zap className="w-5 h-5" />, color: "amber" },
     { label: "Completed", value: stats.completedProjects, icon: <CheckSquare className="w-5 h-5" />, color: "emerald" },
-    { label: "Total Clients", value: stats.totalClients, icon: <Building2 className="w-5 h-5" />, color: "blue", trend: { value: 5, label: "this quarter" } },
+    { label: "Total Clients", value: stats.totalClients, icon: <Building2 className="w-5 h-5" />, color: "blue" },
     { label: "Team Members", value: stats.teamMembers, icon: <Users className="w-5 h-5" />, color: "violet" },
-    { label: "Total Leads", value: stats.pipelineLeads, icon: <GitBranch className="w-5 h-5" />, color: "cyan", trend: { value: 15, label: "new" } },
+    { label: "Total Leads", value: stats.pipelineLeads, icon: <GitBranch className="w-5 h-5" />, color: "cyan" },
     { label: "Pending Responses", value: stats.pendingResponses, icon: <MessageSquare className="w-5 h-5" />, color: "rose" },
     { label: "Upcoming Meetings", value: stats.upcomingMeetings, icon: <CalendarDays className="w-5 h-5" />, color: "amber" },
     { label: "Tasks Done", value: stats.tasksCompleted, icon: <Target className="w-5 h-5" />, color: "emerald" },
     { label: "Tasks Pending", value: stats.tasksPending, icon: <Clock className="w-5 h-5" />, color: "slate" },
     { label: "New Leads", value: stats.newLeads, icon: <TrendingUp className="w-5 h-5" />, color: "blue" },
-    { label: "Total Revenue", value: formatCurrency(stats.totalRevenue), icon: <DollarSign className="w-5 h-5" />, color: "emerald", trend: { value: 22, label: "growth" } },
+    { label: "Total Revenue", value: formatCurrency(stats.totalRevenue), icon: <DollarSign className="w-5 h-5" />, color: "emerald" },
   ];
 
   return (

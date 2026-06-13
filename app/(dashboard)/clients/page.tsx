@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, Globe, Mail, Phone } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { Client } from "@/app/types";
+import { Client, Project } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 
 export default function ClientsPage() {
   const { data: clients, loading } = useCollection<Client>("clients");
+  const { data: projects } = useCollection<Project>("projects");
   const { add, update, remove } = useFirestore("clients");
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
@@ -33,14 +34,17 @@ export default function ClientsPage() {
       }
 
       if (editing) { await update(editing.id, form); toast.success("Client updated"); }
-      else { await add(form); toast.success("Client added"); }
+      else { 
+        await add({ ...form, createdBy: currentUserProfile?.id || "admin" }); 
+        toast.success("Client added"); 
+      }
       setShowModal(false);
     } catch { toast.error("Failed to save"); }
   };
 
   const handleDelete = async (id: string) => {
     const client = clients.find((c) => c.id === id);
-    if (!client || !canPerformAction(currentUserProfile?.role, "clients", "delete", client)) {
+    if (!client || !canPerformAction(currentUserProfile?.role, "clients", "delete", client, currentUserProfile?.id)) {
       toast.error("Unauthorized action");
       return;
     }
@@ -49,7 +53,24 @@ export default function ClientsPage() {
     try { await remove(id); toast.success("Client deleted"); } catch { toast.error("Failed to delete"); }
   };
 
-  const filtered = filter === "all" ? clients : clients.filter((c) => c.status === filter);
+  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const userClients = useMemo(() => {
+    if (!isMemberOrViewer) return clients;
+    
+    const assignedClientNames = new Set(
+      projects
+        .filter((p) => p.assignees?.includes(currentUserProfile?.id || "") || p.createdBy === currentUserProfile?.id)
+        .map((p) => p.clientName?.toLowerCase().trim())
+    );
+
+    return clients.filter((c) => 
+      c.createdBy === currentUserProfile?.id ||
+      assignedClientNames.has(c.name?.toLowerCase().trim()) || 
+      assignedClientNames.has(c.company?.toLowerCase().trim())
+    );
+  }, [clients, projects, isMemberOrViewer, currentUserProfile]);
+
+  const filtered = filter === "all" ? userClients : userClients.filter((c) => c.status === filter);
 
   const columns = useMemo<Column<Client>[]>(() => [
     {
@@ -77,7 +98,7 @@ export default function ClientsPage() {
     {
       key: "actions", label: "", render: (c) => {
         const canEdit = canPerformAction(currentUserProfile?.role, "clients", "update", c, currentUserProfile?.id);
-        const canDelete = canPerformAction(currentUserProfile?.role, "clients", "delete", c);
+        const canDelete = canPerformAction(currentUserProfile?.role, "clients", "delete", c, currentUserProfile?.id);
 
         return (
           <div className="flex items-center gap-1">
@@ -101,7 +122,7 @@ export default function ClientsPage() {
       <div className="flex items-center gap-2 flex-wrap">
         {["all", "active", "inactive", "prospect", "churned"].map((s) => (
           <button key={s} onClick={() => setFilter(s)} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === s ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>
-            {s.charAt(0).toUpperCase() + s.slice(1)} {s !== "all" && <span className="text-xs opacity-70">({clients.filter((c) => c.status === s).length})</span>}
+            {s.charAt(0).toUpperCase() + s.slice(1)} {s !== "all" && <span className="text-xs opacity-70">({userClients.filter((c) => c.status === s).length})</span>}
           </button>
         ))}
       </div>

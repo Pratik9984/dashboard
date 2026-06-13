@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, Video, MapPin, Clock, Users as UsersIcon, ExternalLink } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { Meeting } from "@/app/types";
+import { Meeting, TeamMember } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
@@ -15,15 +15,16 @@ import { Timestamp } from "firebase/firestore";
 
 export default function MeetingsPage() {
   const { data: meetings, loading } = useCollection<Meeting>("meetings");
+  const { data: members } = useCollection<TeamMember>("users");
   const { add, update, remove } = useFirestore("meetings");
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Meeting | null>(null);
   const [filter, setFilter] = useState("all");
-  const [form, setForm] = useState({ title: "", description: "", type: "internal" as Meeting["type"], status: "scheduled" as Meeting["status"], duration: 30, location: "", meetingUrl: "", notes: "", attendeeNames: "", actionItems: "" });
+  const [form, setForm] = useState({ title: "", description: "", type: "internal" as Meeting["type"], status: "scheduled" as Meeting["status"], duration: 30, location: "", meetingUrl: "", notes: "", attendeeNames: "", actionItems: "", attendees: [] as string[] });
 
-  const openAdd = () => { setEditing(null); setForm({ title: "", description: "", type: "internal", status: "scheduled", duration: 30, location: "", meetingUrl: "", notes: "", attendeeNames: "", actionItems: "" }); setShowModal(true); };
-  const openEdit = (m: Meeting) => { setEditing(m); setForm({ title: m.title, description: m.description || "", type: m.type, status: m.status, duration: m.duration, location: m.location || "", meetingUrl: m.meetingUrl || "", notes: m.notes || "", attendeeNames: m.attendeeNames.join(", "), actionItems: m.actionItems?.join("\n") || "" }); setShowModal(true); };
+  const openAdd = () => { setEditing(null); setForm({ title: "", description: "", type: "internal", status: "scheduled", duration: 30, location: "", meetingUrl: "", notes: "", attendeeNames: "", actionItems: "", attendees: [] }); setShowModal(true); };
+  const openEdit = (m: Meeting) => { setEditing(m); setForm({ title: m.title, description: m.description || "", type: m.type, status: m.status, duration: m.duration, location: m.location || "", meetingUrl: m.meetingUrl || "", notes: m.notes || "", attendeeNames: m.attendeeNames.join(", "), actionItems: m.actionItems?.join("\n") || "", attendees: m.attendees || [] }); setShowModal(true); };
 
   const handleSave = async () => {
     try {
@@ -33,7 +34,26 @@ export default function MeetingsPage() {
         return;
       }
 
-      const data = { ...form, attendees: [], attendeeNames: form.attendeeNames.split(",").map((n) => n.trim()).filter(Boolean), actionItems: form.actionItems.split("\n").filter(Boolean), date: Timestamp.now(), createdBy: currentUserProfile?.id || "admin" };
+      const teamNames = form.attendees.map(id => members.find(m => m.id === id)?.name).filter(Boolean);
+      const externalNames = form.attendeeNames.split(",").map((n) => n.trim()).filter(Boolean);
+      const allAttendeeNames = Array.from(new Set([...teamNames, ...externalNames]));
+
+      const data = {
+        title: form.title,
+        description: form.description,
+        type: form.type,
+        status: form.status,
+        duration: form.duration,
+        location: form.location,
+        meetingUrl: form.meetingUrl,
+        notes: form.notes,
+        actionItems: form.actionItems.split("\n").filter(Boolean),
+        attendees: form.attendees,
+        attendeeNames: allAttendeeNames,
+        date: Timestamp.now(),
+        createdBy: currentUserProfile?.id || "admin"
+      };
+
       if (editing) { await update(editing.id, data); toast.success("Meeting updated"); }
       else { await add(data); toast.success("Meeting scheduled"); }
       setShowModal(false);
@@ -51,7 +71,16 @@ export default function MeetingsPage() {
     try { await remove(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
 
-  const filtered = filter === "all" ? meetings : meetings.filter((m) => m.status === filter);
+  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const userMeetings = isMemberOrViewer
+    ? meetings.filter((m) => {
+        return m.createdBy === currentUserProfile?.id ||
+               m.attendees?.includes(currentUserProfile?.id || "") ||
+               m.attendeeNames?.some((name) => name.toLowerCase() === currentUserProfile?.name?.toLowerCase());
+      })
+    : meetings;
+
+  const filtered = filter === "all" ? userMeetings : userMeetings.filter((m) => m.status === filter);
 
   const columns = useMemo<Column<Meeting>[]>(() => [
     { key: "title", label: "Meeting", sortable: true, render: (m) => (
@@ -63,9 +92,16 @@ export default function MeetingsPage() {
     { key: "type", label: "Type", render: (m) => <StatusBadge status={m.type} /> },
     { key: "status", label: "Status", render: (m) => <StatusBadge status={m.status} /> },
     { key: "attendeeNames", label: "Attendees", render: (m) => (
-      <div className="flex items-center gap-1">
-        <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
-        <span className="text-sm text-slate-600">{m.attendeeNames.length}</span>
+      <div className="flex flex-wrap gap-1 max-w-[200px]">
+        {m.attendeeNames && m.attendeeNames.length > 0 ? (
+          m.attendeeNames.map((name, idx) => (
+            <span key={idx} className="inline-flex items-center text-[10px] font-medium bg-slate-50 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+              👤 {name}
+            </span>
+          ))
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
       </div>
     )},
     { key: "duration", label: "Duration", render: (m) => <span className="text-sm text-slate-600">{m.duration}min</span> },
@@ -86,7 +122,7 @@ export default function MeetingsPage() {
         </div>
       );
     }},
-  ], [currentUserProfile?.role, currentUserProfile?.id]);
+  ], [currentUserProfile?.role, currentUserProfile?.id, members]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading meetings..." />;
 
@@ -117,7 +153,33 @@ export default function MeetingsPage() {
             <div><label className="label">Location</label><input className="input-field" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Office, Zoom, etc." /></div>
             <div><label className="label">Meeting URL</label><input className="input-field" value={form.meetingUrl} onChange={(e) => setForm({ ...form, meetingUrl: e.target.value })} placeholder="https://..." /></div>
           </div>
-          <div><label className="label">Attendees (comma-separated names)</label><input className="input-field" value={form.attendeeNames} onChange={(e) => setForm({ ...form, attendeeNames: e.target.value })} /></div>
+          
+          <div>
+            <label className="label">Team Attendees</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-slate-50/50 mb-3">
+              {members.map((m) => {
+                const checked = form.attendees.includes(m.id);
+                return (
+                  <label key={m.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-100/85 p-1 rounded transition-colors">
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 w-4 h-4"
+                      checked={checked}
+                      onChange={(e) => {
+                        const newAttendees = e.target.checked
+                          ? [...form.attendees, m.id]
+                          : form.attendees.filter((id) => id !== m.id);
+                        setForm({ ...form, attendees: newAttendees });
+                      }}
+                    />
+                    <span>{m.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div><label className="label">Other / External Attendees (comma-separated names)</label><input className="input-field" value={form.attendeeNames} onChange={(e) => setForm({ ...form, attendeeNames: e.target.value })} placeholder="Client Name, Partner Name" /></div>
           <div><label className="label">Notes</label><textarea className="input-field" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
           <div><label className="label">Action Items (one per line)</label><textarea className="input-field" rows={3} value={form.actionItems} onChange={(e) => setForm({ ...form, actionItems: e.target.value })} /></div>
         </div>

@@ -317,6 +317,10 @@ export function useFirestore(collectionName: string) {
 }
 
 export function useDashboardStats() {
+  const { profile, isAdmin, isManager } = useAuth();
+  const currentUserId = profile?.id || "";
+  const currentUserName = profile?.name || "";
+
   const { data: projects, loading: lp } = useCollection<any>("projects");
   const { data: clients, loading: lc } = useCollection<any>("clients");
   const { data: responses, loading: lr } = useCollection<any>("responses");
@@ -324,38 +328,76 @@ export function useDashboardStats() {
   const { data: users, loading: lu } = useCollection<any>("users");
   const { data: leads, loading: lpi } = useCollection<any>("leads");
   const { data: tasks, loading: lt } = useCollection<any>("tasks");
+  const { data: sheets, loading: lsh } = useCollection<any>("sheets");
 
   const stats = useMemo(() => {
-    const activeProjects = projects.filter((p) => p.status === "in_progress").length;
-    const completedProjects = projects.filter((p) => p.status === "completed").length;
-    const pendingResponses = responses.filter((r) => r.status === "new").length;
-    const totalResponses = responses.length;
-    const repliedResponses = responses.filter((r) => r.status === "replied").length;
-    const upcomingMeetings = meetings.filter((m) => m.status === "scheduled").length;
-    const tasksCompleted = tasks.filter((t) => t.status === "done").length;
-    const tasksPending = tasks.filter((t) => t.status !== "done").length;
-    const newLeads = leads.filter((d) => d.stage === "new").length;
-    const totalRevenue = clients.reduce((sum, d) => sum + (d.totalValue || 0), 0);
+    // If not admin/owner/manager, filter data down to user's assigned scope
+    const isRestricted = !isAdmin && !isManager;
+
+    const filteredProjects = isRestricted
+      ? projects.filter((p) => p.assignees?.includes(currentUserId) || p.createdBy === currentUserId)
+      : projects;
+
+    const assignedClientNames = new Set(
+      filteredProjects.map((p) => p.clientName?.toLowerCase().trim())
+    );
+
+    const filteredClients = isRestricted
+      ? clients.filter((c) => c.createdBy === currentUserId || assignedClientNames.has(c.name?.toLowerCase().trim()) || assignedClientNames.has(c.company?.toLowerCase().trim()))
+      : clients;
+
+    const filteredTasks = isRestricted
+      ? tasks.filter((t) => t.assignedTo === currentUserId || t.assigneeName?.toLowerCase() === currentUserName.toLowerCase() || t.createdBy === currentUserId)
+      : tasks;
+
+    const filteredMeetings = isRestricted
+      ? meetings.filter((m) => m.createdBy === currentUserId || m.attendees?.includes(currentUserId) || m.attendeeNames?.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase()))
+      : meetings;
+
+    const myAssignedSheetIds = new Set(
+      sheets
+        .filter((s: any) => s.assignedTo === currentUserId || s.createdBy === currentUserId)
+        .map((s: any) => s.id)
+    );
+
+    const filteredLeads = isRestricted
+      ? leads.filter((l) => l.sheetId && myAssignedSheetIds.has(l.sheetId))
+      : leads;
+
+    const filteredResponses = isRestricted
+      ? responses.filter((r) => r.assignedTo === currentUserId || r.assignedTo === currentUserName)
+      : responses;
+
+    const activeProjects = filteredProjects.filter((p) => p.status === "in_progress").length;
+    const completedProjects = filteredProjects.filter((p) => p.status === "completed").length;
+    const pendingResponses = filteredResponses.filter((r) => r.status === "new").length;
+    const totalResponses = filteredResponses.length;
+    const repliedResponses = filteredResponses.filter((r) => r.status === "replied").length;
+    const upcomingMeetings = filteredMeetings.filter((m) => m.status === "scheduled").length;
+    const tasksCompleted = filteredTasks.filter((t) => t.status === "done").length;
+    const tasksPending = filteredTasks.filter((t) => t.status !== "done").length;
+    const newLeads = filteredLeads.filter((d) => d.stage === "new").length;
+    const totalRevenue = filteredClients.reduce((sum, d) => sum + (d.totalValue || 0), 0);
 
     return {
-      totalProjects: projects.length,
+      totalProjects: filteredProjects.length,
       activeProjects,
       completedProjects,
-      totalClients: clients.length,
+      totalClients: filteredClients.length,
       pendingResponses,
       totalResponses,
       repliedResponses,
       upcomingMeetings,
       teamMembers: users.length,
-      pipelineLeads: leads.length,
+      pipelineLeads: filteredLeads.length,
       tasksCompleted,
       tasksPending,
       newLeads,
       totalRevenue,
     };
-  }, [projects, clients, responses, meetings, users, leads, tasks]);
+  }, [projects, clients, responses, meetings, users, leads, tasks, sheets, isAdmin, isManager, currentUserId, currentUserName]);
 
-  const loading = lp || lc || lr || lm || lu || lpi || lt;
+  const loading = lp || lc || lr || lm || lu || lpi || lt || lsh;
 
   return { stats, loading, refresh: () => {} };
 }

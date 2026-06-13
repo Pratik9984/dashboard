@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, Calendar, Users as UsersIcon } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { Project } from "@/app/types";
+import { Project, TeamMember } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
@@ -15,15 +15,38 @@ import { Timestamp } from "firebase/firestore";
 
 export default function ProjectsPage() {
   const { data: projects, loading } = useCollection<Project>("projects");
+  const { data: members } = useCollection<TeamMember>("users");
   const { add, update, remove } = useFirestore("projects");
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [filter, setFilter] = useState("all");
-  const [form, setForm] = useState({ name: "", description: "", clientName: "", status: "planning" as Project["status"], priority: "medium" as Project["priority"], startDate: "", dueDate: "", budget: "", tags: "", progress: 0 });
+  const [form, setForm] = useState({ name: "", description: "", clientName: "", status: "planning" as Project["status"], priority: "medium" as Project["priority"], startDate: "", dueDate: "", budget: "", tags: "", progress: 0, assignees: [] as string[] });
 
-  const openAdd = () => { setEditing(null); setForm({ name: "", description: "", clientName: "", status: "planning", priority: "medium", startDate: "", dueDate: "", budget: "", tags: "", progress: 0 }); setShowModal(true); };
-  const openEdit = (p: Project) => { setEditing(p); setForm({ name: p.name, description: p.description, clientName: p.clientName, status: p.status, priority: p.priority, startDate: "", dueDate: "", budget: p.budget?.toString() || "", tags: p.tags.join(", "), progress: p.progress }); setShowModal(true); };
+  const openAdd = () => { setEditing(null); setForm({ name: "", description: "", clientName: "", status: "planning", priority: "medium", startDate: "", dueDate: "", budget: "", tags: "", progress: 0, assignees: [] }); setShowModal(true); };
+  
+  const openEdit = (p: Project) => {
+    const getFormDate = (d: any) => {
+      if (!d) return "";
+      const dateObj = d instanceof Date ? d : (typeof d.toDate === "function" ? d.toDate() : new Date(d));
+      return isNaN(dateObj.getTime()) ? "" : dateObj.toISOString().slice(0, 10);
+    };
+    setEditing(p);
+    setForm({
+      name: p.name,
+      description: p.description,
+      clientName: p.clientName,
+      status: p.status,
+      priority: p.priority,
+      startDate: getFormDate(p.startDate),
+      dueDate: getFormDate(p.dueDate),
+      budget: p.budget?.toString() || "",
+      tags: p.tags.join(", "),
+      progress: p.progress,
+      assignees: p.assignees || []
+    });
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
     try {
@@ -34,9 +57,19 @@ export default function ProjectsPage() {
       }
 
       const data = {
-        ...form, budget: form.budget ? parseFloat(form.budget) : 0,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        clientName: form.clientName.trim(),
+        status: form.status,
+        priority: form.priority,
+        progress: form.progress,
+        budget: form.budget ? parseFloat(form.budget) : 0,
         tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-        assignees: [], startDate: Timestamp.now(), dueDate: Timestamp.now(), createdBy: currentUserProfile?.id || "admin",
+        assignees: form.assignees,
+        startDate: form.startDate ? Timestamp.fromDate(new Date(form.startDate)) : Timestamp.now(),
+        dueDate: form.dueDate ? Timestamp.fromDate(new Date(form.dueDate)) : Timestamp.now(),
+        createdBy: editing ? editing.createdBy : (currentUserProfile?.id || "admin"),
+        createdAt: editing ? editing.createdAt : Timestamp.now(),
       };
       if (editing) { await update(editing.id, data); toast.success("Project updated"); }
       else { await add(data); toast.success("Project created"); }
@@ -55,7 +88,12 @@ export default function ProjectsPage() {
     try { await remove(id); toast.success("Project deleted"); } catch { toast.error("Failed to delete"); }
   };
 
-  const filtered = filter === "all" ? projects : projects.filter((p) => p.status === filter);
+  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const userProjects = isMemberOrViewer
+    ? projects.filter((p) => p.assignees?.includes(currentUserProfile?.id || "") || p.createdBy === currentUserProfile?.id)
+    : projects;
+
+  const filtered = filter === "all" ? userProjects : userProjects.filter((p) => p.status === filter);
 
   const columns = useMemo<Column<Project>[]>(() => [
     { key: "name", label: "Project", sortable: true, render: (p) => (
@@ -64,6 +102,22 @@ export default function ProjectsPage() {
     { key: "clientName", label: "Client", sortable: true },
     { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} /> },
     { key: "priority", label: "Priority", render: (p) => <StatusBadge status={p.priority} /> },
+    { key: "assignees", label: "Assignees", render: (p) => (
+      <div className="flex flex-wrap gap-1 max-w-[150px]">
+        {p.assignees && p.assignees.length > 0 ? (
+          p.assignees.map((id) => {
+            const member = members.find((m) => m.id === id);
+            return (
+              <span key={id} className="inline-flex items-center text-[10px] font-medium bg-slate-50 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded" title={member?.email}>
+                👤 {member?.name || "Unknown"}
+              </span>
+            );
+          })
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </div>
+    )},
     { key: "progress", label: "Progress", render: (p) => (
       <div className="flex items-center gap-2 min-w-[120px]">
         <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -88,7 +142,7 @@ export default function ProjectsPage() {
         </div>
       );
     }},
-  ], [currentUserProfile?.role, currentUserProfile?.id]);
+  ], [currentUserProfile?.role, currentUserProfile?.id, members]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading projects..." />;
 
@@ -99,7 +153,7 @@ export default function ProjectsPage() {
         {["all", "planning", "in_progress", "review", "completed", "on_hold"].map((s) => (
           <button key={s} onClick={() => setFilter(s)} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === s ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>
             {s === "all" ? "All" : s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-            {s !== "all" && <span className="ml-1.5 text-xs opacity-70">({projects.filter((p) => p.status === s).length})</span>}
+            {s !== "all" && <span className="ml-1.5 text-xs opacity-70">({userProjects.filter((p) => p.status === s).length})</span>}
           </button>
         ))}
       </div>
@@ -128,6 +182,36 @@ export default function ProjectsPage() {
             <div><label className="label">Progress (%)</label><input className="input-field" type="number" min={0} max={100} value={form.progress} onChange={(e) => setForm({ ...form, progress: parseInt(e.target.value) || 0 })} /></div>
           </div>
           <div><label className="label">Tags (comma-separated)</label><input className="input-field" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="Web, Mobile, UI/UX" /></div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="label">Start Date</label><input className="input-field" type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} /></div>
+            <div><label className="label">Due Date</label><input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
+          </div>
+          
+          <div>
+            <label className="label">Assignees</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2.5 bg-slate-50/50">
+              {members.map((m) => {
+                const checked = form.assignees.includes(m.id);
+                return (
+                  <label key={m.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-100/80 p-1.5 rounded transition-colors">
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 w-4 h-4"
+                      checked={checked}
+                      onChange={(e) => {
+                        const newAssignees = e.target.checked
+                          ? [...form.assignees, m.id]
+                          : form.assignees.filter((id) => id !== m.id);
+                        setForm({ ...form, assignees: newAssignees });
+                      }}
+                    />
+                    <span>{m.name} <span className="text-xs text-slate-400">({m.role})</span></span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </Modal>
     </div>

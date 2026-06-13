@@ -67,6 +67,7 @@ export interface Client {
   totalValue: number;
   notes?: string;
   createdAt: Timestamp | Date;
+  createdBy?: string;
 }
 
 export interface Lead {
@@ -80,6 +81,8 @@ export interface Lead {
   value?: number;
   notes?: string;
   assignedTo?: string;
+  sheetId?: string;
+  sheetName?: string;
   createdAt: Timestamp | Date;
   updatedAt: Timestamp | Date;
 }
@@ -191,6 +194,7 @@ export interface SheetData {
   createdAt: Timestamp | Date;
   createdBy: string;
   updatedAt: Timestamp | Date;
+  assignedTo?: string;
 }
 
 export interface WebsiteInsight {

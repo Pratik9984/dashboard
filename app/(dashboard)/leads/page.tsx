@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, ArrowRight, DollarSign, PhoneCall } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { Lead, CallLog } from "@/app/types";
+import { Lead, CallLog, TeamMember } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
@@ -15,11 +15,13 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import toast from "react-hot-toast";
-import { Timestamp, writeBatch, doc as firestoreDoc } from "firebase/firestore";
+import { Timestamp, writeBatch, doc as firestoreDoc, collection, query, where, getDocs, addDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 
 export default function LeadsPage() {
   const { data: leads, loading, refresh } = useCollection<Lead>("leads");
+  const { data: users } = useCollection<TeamMember>("users");
+  const { data: sheets } = useCollection<any>("sheets");
   const { add, update, remove } = useFirestore("leads");
   const { add: addCallLog } = useFirestore("calls");
   const { profile: currentUserProfile } = useAuth();
@@ -28,13 +30,45 @@ export default function LeadsPage() {
   const [showCallModal, setShowCallModal] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [view, setView] = useState<"board" | "list" | "analysis">("board");
+  const [selectedSheet, setSelectedSheet] = useState<string>("all");
+
+  const isRestricted = useMemo(() => {
+    return currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  }, [currentUserProfile]);
+
+  const myAssignedSheetIds = useMemo(() => {
+    if (!sheets || !currentUserProfile) return new Set<string>();
+    return new Set(
+      sheets
+        .filter((s: any) => s.assignedTo === currentUserProfile.id || s.createdBy === currentUserProfile.id)
+        .map((s: any) => s.id)
+    );
+  }, [sheets, currentUserProfile]);
+
+  const myLeads = useMemo(() => {
+    if (!isRestricted) return leads;
+    return leads.filter((l) => l.sheetId && myAssignedSheetIds.has(l.sheetId));
+  }, [leads, myAssignedSheetIds, isRestricted]);
+
+  const uniqueSheets = useMemo(() => {
+    const baseLeads = isRestricted ? myLeads : leads;
+    const names = baseLeads.map(l => l.sheetName).filter((name): name is string => typeof name === "string" && name.trim() !== "");
+    return Array.from(new Set(names)).sort();
+  }, [leads, myLeads, isRestricted]);
+
+  const filteredLeads = useMemo(() => {
+    const baseLeads = isRestricted ? myLeads : leads;
+    if (selectedSheet === "all") return baseLeads;
+    if (selectedSheet === "manual") return baseLeads.filter(l => !l.sheetName);
+    return baseLeads.filter(l => l.sheetName === selectedSheet);
+  }, [leads, myLeads, isRestricted, selectedSheet]);
 
   // Lead analysis statistics computation
   const stageData = useMemo(() => {
     const counts: Record<string, number> = {
       new: 0, contacted: 0, qualified: 0, proposal: 0, negotiation: 0, won: 0, lost: 0
     };
-    leads.forEach((l) => {
+    filteredLeads.forEach((l) => {
       const currentStage = (l.stage || "new").toLowerCase().trim();
       const normalizedStage = LEAD_STAGES.includes(currentStage) ? currentStage : "new";
       if (normalizedStage in counts) counts[normalizedStage]++;
@@ -49,11 +83,11 @@ export default function LeadsPage() {
       { name: "Won", value: counts.won, color: "#10B981" },
       { name: "Lost", value: counts.lost, color: "#EF4444" },
     ].filter(item => item.value > 0);
-  }, [leads]);
+  }, [filteredLeads]);
 
   const sourceData = useMemo(() => {
     const counts: Record<string, number> = {};
-    leads.forEach((l) => {
+    filteredLeads.forEach((l) => {
       const src = l.source || "Unknown";
       counts[src] = (counts[src] || 0) + 1;
     });
@@ -68,13 +102,13 @@ export default function LeadsPage() {
       value,
       color: colors[i % colors.length]
     }));
-  }, [leads]);
+  }, [filteredLeads]);
 
   const stageValueData = useMemo(() => {
     const values: Record<string, number> = {
       new: 0, contacted: 0, qualified: 0, proposal: 0, negotiation: 0, won: 0, lost: 0
     };
-    leads.forEach((l) => {
+    filteredLeads.forEach((l) => {
       const currentStage = (l.stage || "new").toLowerCase().trim();
       const normalizedStage = LEAD_STAGES.includes(currentStage) ? currentStage : "new";
       if (normalizedStage in values) {
@@ -91,19 +125,19 @@ export default function LeadsPage() {
       stage: stageLabels[stage] || stage,
       value: val
     }));
-  }, [leads]);
+  }, [filteredLeads]);
 
   const analysisMetrics = useMemo(() => {
-    const wonCount = leads.filter(l => (l.stage || "new").toLowerCase().trim() === "won").length;
-    const lostCount = leads.filter(l => (l.stage || "new").toLowerCase().trim() === "lost").length;
+    const wonCount = filteredLeads.filter(l => (l.stage || "new").toLowerCase().trim() === "won").length;
+    const lostCount = filteredLeads.filter(l => (l.stage || "new").toLowerCase().trim() === "lost").length;
     const closedCount = wonCount + lostCount;
     const winRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : 0;
     
-    const totalVal = leads.reduce((s, l) => s + (l.value || 0), 0);
-    const avgVal = leads.length > 0 ? Math.round(totalVal / leads.length) : 0;
+    const totalVal = filteredLeads.reduce((s, l) => s + (l.value || 0), 0);
+    const avgVal = filteredLeads.length > 0 ? Math.round(totalVal / filteredLeads.length) : 0;
 
     return { winRate, avgVal, closedCount };
-  }, [leads]);
+  }, [filteredLeads]);
 
   // Auto-normalize any invalid stages in the database on load
   React.useEffect(() => {
@@ -136,7 +170,7 @@ export default function LeadsPage() {
     }
   }, [leads, loading, refresh]);
   
-  const [form, setForm] = useState({ name: "", company: "", email: "", phone: "", source: "", stage: "new" as Lead["stage"], value: "", notes: "" });
+  const [form, setForm] = useState({ name: "", company: "", email: "", phone: "", source: "", stage: "new" as Lead["stage"], value: "", notes: "", assignedTo: "admin", sheetId: "", sheetName: "" });
   const [callForm, setCallForm] = useState({
     type: "call" as CallLog["type"],
     contactName: "",
@@ -149,7 +183,7 @@ export default function LeadsPage() {
     recordedBy: "admin"
   });
 
-  const openAdd = () => { setEditing(null); setForm({ name: "", company: "", email: "", phone: "", source: "", stage: "new", value: "", notes: "" }); setShowModal(true); };
+  const openAdd = () => { setEditing(null); setForm({ name: "", company: "", email: "", phone: "", source: "", stage: "new", value: "", notes: "", assignedTo: "admin", sheetId: "", sheetName: "" }); setShowModal(true); };
   
   const openLogCall = (lead: Lead) => {
     setCallForm({
@@ -197,9 +231,103 @@ export default function LeadsPage() {
       source: l.source, 
       stage: normalizedStage, 
       value: l.value?.toString() || "", 
-      notes: l.notes || "" 
+      notes: l.notes || "",
+      assignedTo: l.assignedTo || "admin",
+      sheetId: l.sheetId || "",
+      sheetName: l.sheetName || ""
     }); 
     setShowModal(true); 
+  };
+
+  const handleLeadWon = async (lead: Lead, leadValue: number = lead.value || 0) => {
+    try {
+      const clientsRef = collection(db, "clients");
+      let existingClient: any = null;
+      let existingClientId = "";
+
+      if (lead.email) {
+        const q = query(clientsRef, where("email", "==", lead.email));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          existingClient = snap.docs[0].data();
+          existingClientId = snap.docs[0].id;
+        }
+      }
+
+      if (!existingClient && lead.company) {
+        const q = query(clientsRef, where("company", "==", lead.company));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          existingClient = snap.docs[0].data();
+          existingClientId = snap.docs[0].id;
+        }
+      }
+
+      let clientId = existingClientId;
+      if (existingClient) {
+        const updatedClient = {
+          status: "active",
+          totalProjects: (existingClient.totalProjects || 0) + 1,
+          totalValue: (existingClient.totalValue || 0) + leadValue,
+          updatedAt: Timestamp.now()
+        };
+        await updateDoc(firestoreDoc(db, "clients", existingClientId), updatedClient);
+        toast.success(`Updated existing client: ${existingClient.company || existingClient.name}`);
+      } else {
+        const newClientData = {
+          name: lead.name,
+          company: lead.company || lead.name,
+          email: lead.email || "",
+          phone: lead.phone || "",
+          status: "active",
+          totalProjects: 1,
+          totalValue: leadValue,
+          notes: lead.notes || "",
+          createdAt: Timestamp.now(),
+          createdBy: currentUserProfile?.id || "admin"
+        };
+        const docRef = await addDoc(clientsRef, newClientData);
+        clientId = docRef.id;
+        toast.success(`Created new client: ${newClientData.company}`);
+      }
+
+      const projectsRef = collection(db, "projects");
+      const projectDueDate = new Date();
+      projectDueDate.setDate(projectDueDate.getDate() + 30);
+
+      const newProjectData = {
+        name: `${lead.company || lead.name} Project`,
+        description: `Project converted from won lead. Notes: ${lead.notes || ""}`,
+        clientId: clientId,
+        clientName: lead.company || lead.name,
+        status: "planning",
+        priority: "medium",
+        startDate: Timestamp.now(),
+        dueDate: Timestamp.fromDate(projectDueDate),
+        assignees: [],
+        budget: leadValue,
+        tags: ["converted-lead"],
+        progress: 0,
+        createdAt: Timestamp.now(),
+        createdBy: currentUserProfile?.id || "admin"
+      };
+
+      await addDoc(projectsRef, newProjectData);
+      toast.success(`Created new project: ${newProjectData.name}`);
+      
+      // Clear localStorage client and project query caches to trigger layout sync
+      if (typeof window !== "undefined") {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith("stackscale_col_clients") || key.startsWith("stackscale_col_projects") || key.startsWith("stackscale_stats"))) {
+            localStorage.removeItem(key);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to automatically create client and project:", err);
+      toast.error("Lead won, but failed to create client/project records.");
+    }
   };
 
   const handleSave = async () => {
@@ -209,9 +337,31 @@ export default function LeadsPage() {
         toast.error("Unauthorized action");
         return;
       }
-      const data = { ...form, value: form.value ? parseFloat(form.value) : 0, updatedAt: Timestamp.now() };
-      if (editing) { await update(editing.id, data); toast.success("Lead updated"); }
-      else { await add(data); toast.success("Lead added"); }
+      
+      const selectedSheetObj = form.sheetId ? sheets.find((s: any) => s.id === form.sheetId) : null;
+      const sheetAssignee = selectedSheetObj?.assignedTo ? users.find((u) => u.id === selectedSheetObj.assignedTo) : null;
+      
+      const data = { 
+        ...form, 
+        value: form.value ? parseFloat(form.value) : 0, 
+        updatedAt: Timestamp.now(),
+        assignedTo: sheetAssignee ? sheetAssignee.name : (form.assignedTo || "admin")
+      };
+
+      if (editing) { 
+        await update(editing.id, data); 
+        toast.success("Lead updated");
+        if (data.stage === "won" && (editing.stage || "new").toLowerCase().trim() !== "won") {
+          await handleLeadWon({ id: editing.id, ...data } as any, data.value);
+        }
+      }
+      else { 
+        const docId = await add(data); 
+        toast.success("Lead added");
+        if (data.stage === "won") {
+          await handleLeadWon({ id: docId, ...data } as any, data.value);
+        }
+      }
       setShowModal(false);
       refresh();
     } catch { toast.error("Failed to save"); }
@@ -225,6 +375,9 @@ export default function LeadsPage() {
       }
       await update(lead.id, { stage: newStage, updatedAt: Timestamp.now() }); 
       toast.success(`Moved to ${newStage}`); 
+      if (newStage === "won") {
+        await handleLeadWon(lead);
+      }
       refresh();
     }
     catch { toast.error("Failed to move"); }
@@ -294,19 +447,35 @@ export default function LeadsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button onClick={() => setView("board")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "board" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Board</button>
-          <button onClick={() => setView("list")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "list" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>List</button>
-          <button onClick={() => setView("analysis")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "analysis" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Analysis</button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setView("board")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "board" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Board</button>
+            <button onClick={() => setView("list")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "list" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>List</button>
+            <button onClick={() => setView("analysis")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "analysis" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Analysis</button>
+          </div>
+          
+          <select
+            value={selectedSheet}
+            onChange={(e) => setSelectedSheet(e.target.value)}
+            className="px-3.5 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none font-medium text-slate-600 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+          >
+            <option value="all">All Sheets</option>
+            <option value="manual">Manually Created</option>
+            {uniqueSheets.map((sheetName) => (
+              <option key={sheetName} value={sheetName}>
+                Sheet: {sheetName}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center gap-3">
-          {leads.length > 0 && canPerformAction(currentUserProfile?.role, "leads", "delete") && (
+          {filteredLeads.length > 0 && canPerformAction(currentUserProfile?.role, "leads", "delete") && (
             <button
               onClick={handleClearAll}
               disabled={clearing}
               className="px-3.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors flex items-center gap-1.5 disabled:opacity-50"
             >
-              <Trash2 className="w-4 h-4" /> Clear All Leads
+              <Trash2 className="w-4 h-4" /> Clear Filtered Leads
             </button>
           )}
           {canPerformAction(currentUserProfile?.role, "leads", "create") && (
@@ -317,9 +486,9 @@ export default function LeadsPage() {
 
       {/* Summary Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-4 text-center"><p className="text-2xl font-bold text-slate-800">{leads.length}</p><p className="text-xs text-slate-500">Total Leads</p></div>
-        <div className="card p-4 text-center"><p className="text-2xl font-bold text-emerald-600">{leads.filter((l) => (l.stage || "new").toLowerCase().trim() === "won").length}</p><p className="text-xs text-slate-500">Won</p></div>
-        <div className="card p-4 text-center"><p className="text-2xl font-bold text-amber-600">{leads.filter((l) => !["won", "lost"].includes((l.stage || "new").toLowerCase().trim())).length}</p><p className="text-xs text-slate-500">In Progress</p></div>
+        <div className="card p-4 text-center"><p className="text-2xl font-bold text-slate-800">{filteredLeads.length}</p><p className="text-xs text-slate-500">Total Leads</p></div>
+        <div className="card p-4 text-center"><p className="text-2xl font-bold text-emerald-600">{filteredLeads.filter((l) => (l.stage || "new").toLowerCase().trim() === "won").length}</p><p className="text-xs text-slate-500">Won</p></div>
+        <div className="card p-4 text-center"><p className="text-2xl font-bold text-amber-600">{filteredLeads.filter((l) => !["won", "lost"].includes((l.stage || "new").toLowerCase().trim())).length}</p><p className="text-xs text-slate-500">In Progress</p></div>
       </div>
 
       {view === "analysis" && (
@@ -352,7 +521,7 @@ export default function LeadsPage() {
               <div>
                 <p className="text-sm text-slate-500 font-medium">Total Pipeline Value</p>
                 <h4 className="text-2xl font-bold text-primary-600 mt-1">
-                  {formatCurrency(leads.reduce((s, l) => s + (l.value || 0), 0))}
+                  {formatCurrency(filteredLeads.reduce((s, l) => s + (l.value || 0), 0))}
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">Total value of all prospective leads</p>
               </div>
@@ -442,42 +611,42 @@ export default function LeadsPage() {
               <h3 className="text-sm font-semibold text-slate-800 mb-4">Pipeline Funnel Health</h3>
               <div className="space-y-4">
                 {[
-                  { label: "New Prospects", count: leads.filter(l => {
+                  { label: "New Prospects", count: filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return norm === "new";
-                    }).length, percentage: leads.length > 0 ? Math.round((leads.filter(l => {
+                    }).length, percentage: filteredLeads.length > 0 ? Math.round((filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return norm === "new";
-                    }).length / leads.length) * 100) : 0, color: "bg-blue-500" },
-                  { label: "Contacted / Qualified", count: leads.filter(l => {
+                    }).length / filteredLeads.length) * 100) : 0, color: "bg-blue-500" },
+                  { label: "Contacted / Qualified", count: filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return ["contacted", "qualified"].includes(norm);
-                    }).length, percentage: leads.length > 0 ? Math.round((leads.filter(l => {
+                    }).length, percentage: filteredLeads.length > 0 ? Math.round((filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return ["contacted", "qualified"].includes(norm);
-                    }).length / leads.length) * 100) : 0, color: "bg-violet-500" },
-                  { label: "In Negotiation / Proposal", count: leads.filter(l => {
+                    }).length / filteredLeads.length) * 100) : 0, color: "bg-violet-500" },
+                  { label: "In Negotiation / Proposal", count: filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return ["proposal", "negotiation"].includes(norm);
-                    }).length, percentage: leads.length > 0 ? Math.round((leads.filter(l => {
+                    }).length, percentage: filteredLeads.length > 0 ? Math.round((filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return ["proposal", "negotiation"].includes(norm);
-                    }).length / leads.length) * 100) : 0, color: "bg-amber-500" },
-                  { label: "Closed Won", count: leads.filter(l => {
+                    }).length / filteredLeads.length) * 100) : 0, color: "bg-amber-500" },
+                  { label: "Closed Won", count: filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return norm === "won";
-                    }).length, percentage: leads.length > 0 ? Math.round((leads.filter(l => {
+                    }).length, percentage: filteredLeads.length > 0 ? Math.round((filteredLeads.filter(l => {
                       const s = (l.stage || "new").toLowerCase().trim();
                       const norm = LEAD_STAGES.includes(s) ? s : "new";
                       return norm === "won";
-                    }).length / leads.length) * 100) : 0, color: "bg-emerald-500" },
+                    }).length / filteredLeads.length) * 100) : 0, color: "bg-emerald-500" },
                 ].map((item, idx) => (
                   <div key={idx}>
                     <div className="flex items-center justify-between text-xs mb-1">
@@ -498,7 +667,7 @@ export default function LeadsPage() {
       {view === "board" ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {LEAD_STAGES.map((stage) => {
-            const stageLeads = leads.filter((l) => {
+            const stageLeads = filteredLeads.filter((l) => {
               const currentStage = (l.stage || "new").toLowerCase().trim();
               const normalizedStage = LEAD_STAGES.includes(currentStage) ? currentStage : "new";
               return normalizedStage === stage;
@@ -516,6 +685,20 @@ export default function LeadsPage() {
                         <div>
                           <p className="text-sm font-medium text-slate-800">{lead.name}</p>
                           {lead.company && <p className="text-xs text-slate-400">{lead.company}</p>}
+                          {lead.sheetName && (
+                            <div className="mt-1 flex flex-wrap">
+                              <span className="text-[10px] font-medium bg-slate-50 border border-slate-200 text-slate-400 px-1.5 py-0.5 rounded truncate max-w-[180px]" title={`Sheet: ${lead.sheetName}`}>
+                                📄 {lead.sheetName}
+                              </span>
+                            </div>
+                          )}
+                          {lead.assignedTo && (
+                            <div className="mt-1.5 flex flex-wrap">
+                              <span className="text-[10px] font-medium bg-indigo-50 border border-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded truncate max-w-[180px]" title={`Assigned To: ${lead.assignedTo}`}>
+                                👤 {lead.assignedTo}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {canPerformAction(currentUserProfile?.role, "calls", "create") && (
@@ -558,17 +741,21 @@ export default function LeadsPage() {
         </div>
       ) : (
         <div className="card divide-y divide-slate-100">
-          {leads.length === 0 ? (
+          {filteredLeads.length === 0 ? (
             <EmptyState title="No leads yet" message="Add your first lead to start tracking." />
           ) : (
-            leads.map((l) => (
+            filteredLeads.map((l) => (
               <div key={l.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => openEdit(l)}>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-slate-800">{l.name}</p>
                     {l.company && <span className="text-xs text-slate-400">· {l.company}</span>}
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">{l.email} · {l.source}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {l.email} · {l.source}
+                    {l.sheetName && <span className="text-indigo-500 font-medium"> · 📄 {l.sheetName}</span>}
+                    {l.assignedTo && <span className="text-indigo-600 font-medium"> · 👤 {l.assignedTo}</span>}
+                  </p>
                 </div>
                 <StatusBadge status={l.stage} />
                 {l.value && <span className="text-sm font-semibold text-slate-700">{formatCurrency(l.value)}</span>}
@@ -609,12 +796,64 @@ export default function LeadsPage() {
             <div><label className="label">Email</label><input className="input-field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><label className="label">Phone</label><input className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div><label className="label">Source</label><input className="input-field" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="Website, Referral..." /></div>
             <div><label className="label">Stage</label><select className="input-field" value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value as Lead["stage"] })}>{LEAD_STAGES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}</select></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div><label className="label">Value (₹)</label><input className="input-field" type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></div>
+            <div>
+              <label className="label">Assigned To</label>
+              <select className="input-field" value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })} disabled={!!form.sheetId}>
+                <option value="admin">Admin (Default)</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.name}>{u.name} ({u.role})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Associated Sheet</label>
+            <select
+              className="input-field"
+              value={form.sheetId || ""}
+              onChange={(e) => {
+                const s = sheets.find((sheet: any) => sheet.id === e.target.value);
+                setForm({ ...form, sheetId: e.target.value, sheetName: s ? s.name : "" });
+              }}
+              disabled={isRestricted}
+            >
+              <option value="">None (Manual)</option>
+              {sheets
+                .filter((s: any) => s.type === "leads")
+                .map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name} {s.assignedTo ? "· Assigned" : ""}</option>
+                ))
+              }
+            </select>
           </div>
           <div><label className="label">Notes</label><textarea className="input-field" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+          {editing && (
+            (() => {
+              const customFields = Object.entries(editing).filter(
+                ([key]) => !["id", "name", "company", "email", "phone", "source", "stage", "value", "notes", "assignedTo", "createdAt", "updatedAt"].includes(key.toLowerCase())
+              );
+              if (customFields.length === 0) return null;
+              return (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">Additional Sheet Details</h4>
+                  <div className="grid grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100 max-h-48 overflow-y-auto">
+                    {customFields.map(([key, val]) => (
+                      <div key={key} className="space-y-1">
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">{key}</span>
+                        <span className="text-sm font-medium text-slate-700 block break-words">{String(val !== undefined && val !== null ? val : "—")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()
+          )}
         </div>
       </Modal>
 

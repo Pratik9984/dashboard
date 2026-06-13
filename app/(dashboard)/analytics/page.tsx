@@ -186,10 +186,10 @@ export default function AnalyticsPage() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard label="Total Revenue" value={formatCurrency(totalRevenue)} icon={<DollarSign className="w-5 h-5" />} color="emerald" trend={!isDataEmpty ? { value: 22, label: "YoY" } : undefined} />
-        <StatsCard label="Avg Monthly" value={formatCurrency(avgRevenue)} icon={<TrendingUp className="w-5 h-5" />} color="primary" trend={!isDataEmpty ? { value: 8, label: "growth" } : undefined} />
+        <StatsCard label="Total Revenue" value={formatCurrency(totalRevenue)} icon={<DollarSign className="w-5 h-5" />} color="emerald" />
+        <StatsCard label="Avg Monthly" value={formatCurrency(avgRevenue)} icon={<TrendingUp className="w-5 h-5" />} color="primary" />
         <StatsCard label="Projects Delivered" value={projectsDelivered} icon={<FolderKanban className="w-5 h-5" />} color="violet" />
-        <StatsCard label="Active Clients" value={activeClients} icon={<Users className="w-5 h-5" />} color="blue" trend={!isDataEmpty ? { value: 12, label: "new" } : undefined} />
+        <StatsCard label="Active Clients" value={activeClients} icon={<Users className="w-5 h-5" />} color="blue" />
       </div>
 
       {/* Revenue Trend + Traffic */}

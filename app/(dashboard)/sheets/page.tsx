@@ -1,14 +1,16 @@
 "use client";
-import React, { useState, useRef } from "react";
-import { Plus, Download, Trash2, Upload, Table as TableIcon } from "lucide-react";
+import React, { useState, useRef, useMemo } from "react";
+import { Plus, Download, Trash2, Upload, Edit2, Table as TableIcon } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { SheetData } from "@/app/types";
+import { SheetData, TeamMember } from "@/app/types";
 import Modal from "@/app/components/Modal";
 import LoadingSpinner from "@/app/components/LoadingSpinner";
 import EmptyState from "@/app/components/EmptyState";
 import toast from "react-hot-toast";
 import { getDb } from "@/app/lib/firebase";
 import { writeBatch, doc as firestoreDoc, collection, Timestamp } from "firebase/firestore";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 
 // Helper function to map dynamic sheet columns to database collection properties
 function mapRowToSchema(row: Record<string, any>, type: string) {
@@ -67,6 +69,7 @@ function mapRowToSchema(row: Record<string, any>, type: string) {
 
   if (type === "leads") {
     return {
+      ...row,
       name: String(getVal(["name", "contactname", "leadname", "lead", "businessname", "companyname", "business"], "Unnamed Lead")).trim(),
       company: String(getVal(["company", "business", "organization", "businessname", "companyname"], "")).trim(),
       email: String(getVal(["email", "emailaddress", "mail"], "")).trim(),
@@ -138,7 +141,10 @@ function mapRowToSchema(row: Record<string, any>, type: string) {
 export default function SheetsPage() {
   const db = getDb();
   const { data: sheets, loading } = useCollection<SheetData>("sheets");
+  const { data: users } = useCollection<TeamMember>("users");
   const { add, update, remove } = useFirestore("sheets");
+  const { profile: currentUserProfile, isAdmin, isManager } = useAuth();
+  const isRestricted = !isAdmin && !isManager;
 
   // Instantiated collection writers for data transfers
   const firestoreClients = useFirestore("clients");
@@ -149,14 +155,15 @@ export default function SheetsPage() {
   const firestoreCalls = useFirestore("calls");
 
   const [showModal, setShowModal] = useState(false);
+  const [editingSheet, setEditingSheet] = useState<SheetData | null>(null);
   const [activeSheet, setActiveSheet] = useState<SheetData | null>(null);
-  const [form, setForm] = useState({ name: "", description: "", type: "custom" as SheetData["type"], columns: "Name, Email, Status" });
+  const [form, setForm] = useState({ name: "", description: "", type: "custom" as SheetData["type"], columns: "Name, Email, Status", assignedTo: "" });
   const [transferring, setTransferring] = useState(false);
 
   // States & Ref for spreadsheet upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadForm, setUploadForm] = useState({ name: "", description: "", type: "leads" as SheetData["type"] });
+  const [uploadForm, setUploadForm] = useState({ name: "", description: "", type: "leads" as SheetData["type"], assignedTo: "" });
   const [uploadTempData, setUploadTempData] = useState<{ columns: string[]; rows: any[] } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -226,7 +233,8 @@ export default function SheetsPage() {
         setUploadForm({
           name: file.name.replace(/\.[^/.]+$/, ""),
           description: `Uploaded spreadsheet data from ${file.name}`,
-          type: "leads", // Default to leads since they contain leads
+          type: "leads",
+          assignedTo: isRestricted ? currentUserProfile?.id || "" : ""
         });
         setShowUploadModal(true);
       } catch (err: any) {
@@ -256,7 +264,8 @@ export default function SheetsPage() {
         type: uploadForm.type,
         columns: uploadTempData.columns,
         rows: uploadTempData.rows,
-        createdBy: "admin",
+        assignedTo: uploadForm.assignedTo || "",
+        createdBy: currentUserProfile?.id || "admin",
         updatedAt: new Date(),
       });
       toast.success("Sheet uploaded successfully!", { id: toastId });
@@ -273,9 +282,26 @@ export default function SheetsPage() {
     }
   };
 
-  const openAdd = () => { setForm({ name: "", description: "", type: "custom", columns: "Name, Email, Status" }); setShowModal(true); };
+  const openAdd = () => { setEditingSheet(null); setForm({ name: "", description: "", type: "custom", columns: "Name, Email, Status", assignedTo: isRestricted ? currentUserProfile?.id || "" : "" }); setShowModal(true); };
+  
+  const openEdit = (sheet: SheetData) => {
+    setEditingSheet(sheet);
+    setForm({
+      name: sheet.name,
+      description: sheet.description || "",
+      type: sheet.type,
+      columns: sheet.columns.join(", "),
+      assignedTo: sheet.assignedTo || ""
+    });
+    setShowModal(true);
+  };
 
   const handleTransfer = async (sheet: SheetData) => {
+    if (!canPerformAction(currentUserProfile?.role, "sheets", "update", sheet, currentUserProfile?.id)) {
+      toast.error("Unauthorized action");
+      return;
+    }
+
     if (sheet.type === "custom") {
       toast.error("Custom sheets cannot be mapped to a specific collection. Change the sheet type to transfer.");
       return;
@@ -306,6 +332,10 @@ export default function SheetsPage() {
         throw new Error("No valid rows could be parsed for transfer.");
       }
 
+      // Get assignee name from users collection if the sheet is assigned
+      const sheetAssignee = sheet.assignedTo ? users.find((u) => u.id === sheet.assignedTo) : null;
+      const assigneeName = sheetAssignee ? sheetAssignee.name : "admin";
+
       // Chunk rows into groups of 400 to prevent exceeding Firestore batch limit of 500
       const chunkSize = 400;
       for (let i = 0; i < rowsToTransfer.length; i += chunkSize) {
@@ -314,10 +344,16 @@ export default function SheetsPage() {
 
         chunk.forEach((data) => {
           const docRef = firestoreDoc(collection(db, sheet.type));
-          batch.set(docRef, {
+          const docData: any = {
             ...data,
+            sheetId: sheet.id,
+            sheetName: sheet.name,
             createdAt: Timestamp.now(),
-          });
+          };
+          if (sheet.type === "leads" && sheet.assignedTo) {
+            docData.assignedTo = assigneeName;
+          }
+          batch.set(docRef, docData);
           successCount++;
         });
 
@@ -349,12 +385,33 @@ export default function SheetsPage() {
     }
   };
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     try {
+      const action = editingSheet ? "update" : "create";
+      if (!canPerformAction(currentUserProfile?.role, "sheets", action, editingSheet || undefined, currentUserProfile?.id)) {
+        toast.error("Unauthorized action");
+        return;
+      }
+
       const cols = form.columns.split(",").map((c) => c.trim()).filter(Boolean);
-      await add({ name: form.name, description: form.description, type: form.type, columns: cols, rows: [], createdBy: "admin", updatedAt: new Date() });
-      toast.success("Sheet created"); setShowModal(false);
-    } catch { toast.error("Failed to create"); }
+      const data: any = { 
+        name: form.name.trim(), 
+        description: form.description.trim(), 
+        type: form.type, 
+        columns: cols, 
+        assignedTo: form.assignedTo || "",
+        updatedAt: new Date() 
+      };
+      
+      if (editingSheet) {
+        await update(editingSheet.id, data);
+        toast.success("Sheet updated");
+      } else {
+        await add({ ...data, rows: [], createdBy: currentUserProfile?.id || "admin", createdAt: new Date() });
+        toast.success("Sheet created");
+      }
+      setShowModal(false);
+    } catch { toast.error("Failed to save sheet"); }
   };
 
   const handleExport = (sheet: SheetData) => {
@@ -369,33 +426,57 @@ export default function SheetsPage() {
   };
 
   const addRow = async (sheet: SheetData) => {
+    if (!canPerformAction(currentUserProfile?.role, "sheets", "update", sheet, currentUserProfile?.id)) {
+      toast.error("Unauthorized action");
+      return;
+    }
     const newRow = Object.fromEntries(sheet.columns.map((c) => [c, ""]));
     const updatedRows = [...sheet.rows, newRow];
     try { await update(sheet.id, { rows: updatedRows }); toast.success("Row added"); } catch { toast.error("Failed"); }
   };
 
   const updateCell = async (sheet: SheetData, rowIndex: number, col: string, value: string) => {
+    if (!canPerformAction(currentUserProfile?.role, "sheets", "update", sheet, currentUserProfile?.id)) {
+      console.warn("Unauthorized cell edit attempt");
+      return;
+    }
     const rows = [...sheet.rows];
     rows[rowIndex] = { ...rows[rowIndex], [col]: value };
     try { await update(sheet.id, { rows }); } catch { console.error("Failed to save"); }
   };
 
   const deleteRow = async (sheet: SheetData, rowIndex: number) => {
+    if (!canPerformAction(currentUserProfile?.role, "sheets", "update", sheet, currentUserProfile?.id)) {
+      toast.error("Unauthorized action");
+      return;
+    }
     const rows = sheet.rows.filter((_, i) => i !== rowIndex);
     try { await update(sheet.id, { rows }); toast.success("Row deleted"); } catch { toast.error("Failed"); }
   };
 
   const handleDelete = async (id: string) => {
+    const target = sheets.find((s) => s.id === id);
+    if (!target || !canPerformAction(currentUserProfile?.role, "sheets", "delete", target, currentUserProfile?.id)) {
+      toast.error("Unauthorized action");
+      return;
+    }
     if (!confirm("Delete this sheet?")) return;
     try { await remove(id); if (activeSheet?.id === id) setActiveSheet(null); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
 
+  const userSheets = useMemo(() => {
+    if (!isRestricted) return sheets;
+    return sheets.filter(s => s.assignedTo === currentUserProfile?.id || s.createdBy === currentUserProfile?.id);
+  }, [sheets, isRestricted, currentUserProfile]);
+
   if (loading) return <LoadingSpinner size="lg" message="Loading sheets..." />;
+
+  const canCreateSheet = canPerformAction(currentUserProfile?.role, "sheets", "create");
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{sheets.length} sheet{sheets.length !== 1 ? "s" : ""}</p>
+        <p className="text-sm text-slate-500">{userSheets.length} sheet{userSheets.length !== 1 ? "s" : ""}</p>
         <div className="flex items-center gap-3">
           <input
             type="file"
@@ -404,118 +485,175 @@ export default function SheetsPage() {
             onChange={handleFileUpload}
             className="hidden"
           />
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary">
-            <Upload className="w-4 h-4" /> Upload Sheet
-          </button>
-          <button onClick={openAdd} className="btn-primary">
-            <Plus className="w-4 h-4" /> New Sheet
-          </button>
+          {canCreateSheet && (
+            <>
+              <button onClick={() => fileInputRef.current?.click()} className="btn-secondary">
+                <Upload className="w-4 h-4" /> Upload Sheet
+              </button>
+              <button onClick={openAdd} className="btn-primary">
+                <Plus className="w-4 h-4" /> New Sheet
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Sheet List */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {sheets.length === 0 ? (
+        {userSheets.length === 0 ? (
           <div className="col-span-full">
-            <EmptyState title="No sheets yet" message="Create a sheet to organize and export your data." action={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> New Sheet</button>} />
+            <EmptyState title="No sheets yet" message="Create a sheet to organize and export your data." action={canCreateSheet ? <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> New Sheet</button> : undefined} />
           </div>
         ) : (
-          sheets.map((sheet) => (
-            <div key={sheet.id} className={`card-hover p-5 cursor-pointer ${activeSheet?.id === sheet.id ? "ring-2 ring-primary-500" : ""}`} onClick={() => setActiveSheet(sheet)}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
-                    <TableIcon className="w-5 h-5 text-primary-600" />
+          userSheets.map((sheet) => {
+            const canEdit = canPerformAction(currentUserProfile?.role, "sheets", "update", sheet, currentUserProfile?.id);
+            const canDelete = canPerformAction(currentUserProfile?.role, "sheets", "delete", sheet, currentUserProfile?.id);
+
+            return (
+              <div key={sheet.id} className={`card-hover p-5 cursor-pointer ${activeSheet?.id === sheet.id ? "ring-2 ring-primary-500" : ""}`} onClick={() => setActiveSheet(sheet)}>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
+                      <TableIcon className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800">{sheet.name}</h3>
+                      <p className="text-xs text-slate-400">{sheet.rows.length} rows · {sheet.columns.length} cols</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-800">{sheet.name}</h3>
-                    <p className="text-xs text-slate-400">{sheet.rows.length} rows · {sheet.columns.length} cols</p>
+                  <div className="flex items-center gap-1">
+                    {canEdit && (
+                      <button onClick={(e) => { e.stopPropagation(); openEdit(sheet); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit Sheet"><Edit2 className="w-3.5 h-3.5" /></button>
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); handleExport(sheet); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-emerald-600" title="Export XLSX"><Download className="w-3.5 h-3.5" /></button>
+                    {canDelete && (
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(sheet.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={(e) => { e.stopPropagation(); handleExport(sheet); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-emerald-600" title="Export XLSX"><Download className="w-3.5 h-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(sheet.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                {sheet.description && <p className="text-xs text-slate-400 mt-2">{sheet.description}</p>}
+                <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                  <span className="badge bg-primary-50 text-primary-600 border-primary-200">{sheet.type}</span>
+                  {sheet.assignedTo && (
+                    (() => {
+                      const assignee = users.find((u) => u.id === sheet.assignedTo);
+                      return (
+                        <span className="badge bg-indigo-50 text-indigo-700 border-indigo-200">
+                          👤 {assignee ? assignee.name : "Unknown"}
+                        </span>
+                      );
+                    })()
+                  )}
                 </div>
               </div>
-              {sheet.description && <p className="text-xs text-slate-400 mt-2">{sheet.description}</p>}
-              <div className="flex items-center gap-1.5 mt-3 flex-wrap">
-                <span className="badge bg-primary-50 text-primary-600 border-primary-200">{sheet.type}</span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
       {/* Active Sheet Table */}
       {activeSheet && (
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/50">
-            <div className="flex items-center gap-2.5">
-              <h3 className="text-sm font-semibold text-slate-800">{activeSheet.name}</h3>
-              {activeSheet.type !== "custom" && (
-                <span className="badge bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] uppercase font-bold">
-                  Mapped: {activeSheet.type}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => addRow(activeSheet)} className="btn-ghost text-xs"><Plus className="w-3.5 h-3.5" /> Row</button>
-              {activeSheet.type !== "custom" && (
-                <button
-                  onClick={() => handleTransfer(activeSheet)}
-                  disabled={transferring}
-                  className="btn-ghost text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
-                  title={`Transfer sheet rows directly to the ${activeSheet.type} collection`}
-                >
-                  <Upload className="w-3.5 h-3.5" /> Transfer to DB
-                </button>
-              )}
-              <button onClick={() => handleExport(activeSheet)} className="btn-ghost text-xs"><Download className="w-3.5 h-3.5" /> Export</button>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: activeSheet.columns.length * 150 }}>
-              <thead>
-                <tr>
-                  <th className="table-header w-12">#</th>
-                  {activeSheet.columns.map((col) => <th key={col} className="table-header">{col}</th>)}
-                  <th className="table-header w-12"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeSheet.rows.length === 0 ? (
-                  <tr><td colSpan={activeSheet.columns.length + 2} className="text-center py-8 text-sm text-slate-400">No data. Click "+ Row" to add.</td></tr>
-                ) : (
-                  activeSheet.rows.map((row, ri) => (
-                    <tr key={ri} className="hover:bg-slate-50/50">
-                      <td className="table-cell text-xs text-slate-400 text-center">{ri + 1}</td>
-                      {activeSheet.columns.map((col) => (
-                        <td key={col} className="table-cell p-1">
-                          <input className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent hover:border-slate-200 focus:border-primary-400 focus:bg-white rounded outline-none transition-colors"
-                            value={String(row[col] ?? "")} onChange={(e) => updateCell(activeSheet, ri, col, e.target.value)} />
-                        </td>
-                      ))}
-                      <td className="table-cell">
-                        <button onClick={() => deleteRow(activeSheet, ri)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-                      </td>
+        (() => {
+          const canModifyActiveSheet = canPerformAction(currentUserProfile?.role, "sheets", "update", activeSheet, currentUserProfile?.id);
+          return (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-sm font-semibold text-slate-800">{activeSheet.name}</h3>
+                  {activeSheet.type !== "custom" && (
+                    <span className="badge bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] uppercase font-bold">
+                      Mapped: {activeSheet.type}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {canModifyActiveSheet && (
+                    <button onClick={() => addRow(activeSheet)} className="btn-ghost text-xs"><Plus className="w-3.5 h-3.5" /> Row</button>
+                  )}
+                  {activeSheet.type !== "custom" && canModifyActiveSheet && (
+                    <button
+                      onClick={() => handleTransfer(activeSheet)}
+                      disabled={transferring}
+                      className="btn-ghost text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                      title={`Transfer sheet rows directly to the ${activeSheet.type} collection`}
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Transfer to DB
+                    </button>
+                  )}
+                  <button onClick={() => handleExport(activeSheet)} className="btn-ghost text-xs"><Download className="w-3.5 h-3.5" /> Export</button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full" style={{ minWidth: activeSheet.columns.length * 150 }}>
+                  <thead>
+                    <tr>
+                      <th className="table-header w-12">#</th>
+                      {activeSheet.columns.map((col) => <th key={col} className="table-header">{col}</th>)}
+                      <th className="table-header w-12"></th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody>
+                    {activeSheet.rows.length === 0 ? (
+                      <tr><td colSpan={activeSheet.columns.length + 2} className="text-center py-8 text-sm text-slate-400">No data. Click "+ Row" to add.</td></tr>
+                    ) : (
+                      activeSheet.rows.map((row, ri) => (
+                        <tr key={ri} className="hover:bg-slate-50/50">
+                          <td className="table-cell text-xs text-slate-400 text-center">{ri + 1}</td>
+                          {activeSheet.columns.map((col) => (
+                            <td key={col} className="table-cell p-1">
+                              <input className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent hover:border-slate-200 focus:border-primary-400 focus:bg-white rounded outline-none transition-colors"
+                                value={String(row[col] ?? "")} onChange={(e) => updateCell(activeSheet, ri, col, e.target.value)} disabled={!canModifyActiveSheet} />
+                            </td>
+                          ))}
+                          <td className="table-cell">
+                            {canModifyActiveSheet && (
+                              <button onClick={() => deleteRow(activeSheet, ri)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Sheet"
-        footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button><button onClick={handleCreate} className="btn-primary">Create</button></>}>
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingSheet ? "Edit Sheet" : "Create Sheet"}
+        footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button><button onClick={handleSave} className="btn-primary">Save</button></>}>
         <div className="space-y-4">
           <div><label className="label">Name</label><input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><label className="label">Description</label><input className="input-field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-          <div><label className="label">Type</label><select className="input-field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as SheetData["type"] })}>
-            <option value="custom">Custom</option><option value="projects">Projects</option><option value="clients">Clients</option><option value="leads">Leads</option><option value="responses">Responses</option><option value="tasks">Tasks</option><option value="calls">Calls</option>
-          </select></div>
-          <div><label className="label">Columns (comma-separated)</label><input className="input-field" value={form.columns} onChange={(e) => setForm({ ...form, columns: e.target.value })} placeholder="Name, Email, Phone, Status" /></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="label">Type</label><select className="input-field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as SheetData["type"] })}>
+              <option value="custom">Custom</option><option value="projects">Projects</option><option value="clients">Clients</option><option value="leads">Leads</option><option value="responses">Responses</option><option value="tasks">Tasks</option><option value="calls">Calls</option>
+            </select></div>
+            <div>
+              <label className="label">Assigned To</label>
+              <select
+                className="input-field"
+                value={form.assignedTo || ""}
+                onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
+                disabled={isRestricted}
+              >
+                <option value="">Unassigned</option>
+                {users
+                  .filter((u) => {
+                    if (isRestricted) {
+                      return u.id === currentUserProfile?.id;
+                    }
+                    return true;
+                  })
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                  ))
+                }
+              </select>
+            </div>
+          </div>
+          <div><label className="label">Columns (comma-separated)</label><input className="input-field" value={form.columns} onChange={(e) => setForm({ ...form, columns: e.target.value })} placeholder="Name, Email, Phone, Status" disabled={!!editingSheet} /></div>
         </div>
       </Modal>
 
@@ -569,21 +707,45 @@ export default function SheetsPage() {
               placeholder="Description of the spreadsheet"
             />
           </div>
-          <div>
-            <label className="label">Sheet Type (Mapping Collection)</label>
-            <select
-              className="input-field"
-              value={uploadForm.type}
-              onChange={(e) => setUploadForm({ ...uploadForm, type: e.target.value as SheetData["type"] })}
-            >
-              <option value="custom">Custom (No Auto-mapping)</option>
-              <option value="leads">Leads</option>
-              <option value="clients">Clients</option>
-              <option value="projects">Projects</option>
-              <option value="tasks">Tasks</option>
-              <option value="calls">Calls</option>
-              <option value="responses">Form Responses</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Sheet Type (Mapping Collection)</label>
+              <select
+                className="input-field"
+                value={uploadForm.type}
+                onChange={(e) => setUploadForm({ ...uploadForm, type: e.target.value as SheetData["type"] })}
+              >
+                <option value="custom">Custom (No Auto-mapping)</option>
+                <option value="leads">Leads</option>
+                <option value="clients">Clients</option>
+                <option value="projects">Projects</option>
+                <option value="tasks">Tasks</option>
+                <option value="calls">Calls</option>
+                <option value="responses">Form Responses</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Assigned To</label>
+              <select
+                className="input-field"
+                value={uploadForm.assignedTo || ""}
+                onChange={(e) => setUploadForm({ ...uploadForm, assignedTo: e.target.value })}
+                disabled={isRestricted}
+              >
+                <option value="">Unassigned</option>
+                {users
+                  .filter((u) => {
+                    if (isRestricted) {
+                      return u.id === currentUserProfile?.id;
+                    }
+                    return true;
+                  })
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                  ))
+                }
+              </select>
+            </div>
           </div>
           {uploadTempData && (
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 text-xs space-y-2">

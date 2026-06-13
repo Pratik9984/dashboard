@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { Plus, Edit2, Trash2, Check, Circle, Clock, AlertCircle } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { Task } from "@/app/types";
+import { Task, TeamMember } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
@@ -15,15 +15,50 @@ import { Timestamp } from "firebase/firestore";
 
 export default function TasksPage() {
   const { data: tasks, loading } = useCollection<Task>("tasks");
+  const { data: members } = useCollection<TeamMember>("users");
   const { add, update, remove } = useFirestore("tasks");
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [filter, setFilter] = useState("all");
-  const [form, setForm] = useState({ title: "", description: "", projectName: "", assigneeName: "", status: "todo" as Task["status"], priority: "medium" as Task["priority"], tags: "" });
+  const [form, setForm] = useState({ title: "", description: "", projectName: "", assigneeName: "", assignedTo: "", status: "todo" as Task["status"], priority: "medium" as Task["priority"], tags: "", dueDate: "" });
 
-  const openAdd = () => { setEditing(null); setForm({ title: "", description: "", projectName: "", assigneeName: "", status: "todo", priority: "medium", tags: "" }); setShowModal(true); };
-  const openEdit = (t: Task) => { setEditing(t); setForm({ title: t.title, description: t.description || "", projectName: t.projectName, assigneeName: t.assigneeName, status: t.status, priority: t.priority, tags: t.tags.join(", ") }); setShowModal(true); };
+  const openAdd = () => {
+    setEditing(null);
+    const isRestricted = currentUserProfile?.role !== "admin" && currentUserProfile?.role !== "owner" && currentUserProfile?.role !== "manager";
+    setForm({
+      title: "",
+      description: "",
+      projectName: "",
+      assigneeName: isRestricted ? currentUserProfile?.name || "" : "",
+      assignedTo: isRestricted ? currentUserProfile?.id || "" : "",
+      status: "todo",
+      priority: "medium",
+      tags: "",
+      dueDate: ""
+    });
+    setShowModal(true);
+  };
+  const openEdit = (t: Task) => {
+    const getFormDate = (d: any) => {
+      if (!d) return "";
+      const dateObj = d instanceof Date ? d : (typeof d.toDate === "function" ? d.toDate() : new Date(d));
+      return isNaN(dateObj.getTime()) ? "" : dateObj.toISOString().slice(0, 10);
+    };
+    setEditing(t);
+    setForm({
+      title: t.title,
+      description: t.description || "",
+      projectName: t.projectName,
+      assigneeName: t.assigneeName || "",
+      assignedTo: t.assignedTo || "",
+      status: t.status,
+      priority: t.priority,
+      tags: t.tags.join(", "),
+      dueDate: getFormDate(t.dueDate)
+    });
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
     try {
@@ -33,7 +68,20 @@ export default function TasksPage() {
         return;
       }
 
-      const data = { ...form, tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean), projectId: "", assignedTo: "", createdBy: currentUserProfile?.id || "admin" };
+      const data = {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        projectName: form.projectName.trim(),
+        assigneeName: form.assigneeName,
+        assignedTo: form.assignedTo,
+        status: form.status,
+        priority: form.priority,
+        tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+        projectId: editing ? editing.projectId : "",
+        dueDate: form.dueDate ? Timestamp.fromDate(new Date(form.dueDate)) : null,
+        createdBy: editing ? editing.createdBy : (currentUserProfile?.id || "admin"),
+        createdAt: editing ? editing.createdAt : Timestamp.now(),
+      };
       if (editing) { await update(editing.id, data); toast.success("Task updated"); }
       else { await add(data); toast.success("Task created"); }
       setShowModal(false);
@@ -64,8 +112,19 @@ export default function TasksPage() {
     try { await remove(id); toast.success("Task deleted"); } catch { toast.error("Failed to delete"); }
   };
 
-  const filtered = filter === "all" ? tasks : tasks.filter((t) => t.status === filter);
-  const statusCounts = { all: tasks.length, todo: tasks.filter((t) => t.status === "todo").length, in_progress: tasks.filter((t) => t.status === "in_progress").length, review: tasks.filter((t) => t.status === "review").length, done: tasks.filter((t) => t.status === "done").length };
+  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const userTasks = isMemberOrViewer
+    ? tasks.filter((t) => t.assignedTo === currentUserProfile?.id || t.assigneeName?.toLowerCase() === currentUserProfile?.name?.toLowerCase() || t.createdBy === currentUserProfile?.id)
+    : tasks;
+
+  const filtered = filter === "all" ? userTasks : userTasks.filter((t) => t.status === filter);
+  const statusCounts = {
+    all: userTasks.length,
+    todo: userTasks.filter((t) => t.status === "todo").length,
+    in_progress: userTasks.filter((t) => t.status === "in_progress").length,
+    review: userTasks.filter((t) => t.status === "review").length,
+    done: userTasks.filter((t) => t.status === "done").length
+  };
 
   const statusIcon = (s: string) => {
     switch (s) {
@@ -149,11 +208,39 @@ export default function TasksPage() {
           <div><label className="label">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="label">Project</label><input className="input-field" value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} /></div>
-            <div><label className="label">Assignee</label><input className="input-field" value={form.assigneeName} onChange={(e) => setForm({ ...form, assigneeName: e.target.value })} /></div>
+            <div>
+              <label className="label">Assignee</label>
+              <select
+                className="input-field"
+                value={form.assignedTo}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  const member = members.find((m) => m.id === selectedId);
+                  setForm({ ...form, assignedTo: selectedId, assigneeName: member ? member.name : "" });
+                }}
+              >
+                <option value="">Unassigned</option>
+                {members
+                  .filter((m) => {
+                    const isRestricted = currentUserProfile?.role !== "admin" && currentUserProfile?.role !== "owner" && currentUserProfile?.role !== "manager";
+                    if (isRestricted) {
+                      return m.id === currentUserProfile?.id;
+                    }
+                    return true;
+                  })
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.position})
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div><label className="label">Status</label><select className="input-field" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Task["status"] })}><option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="review">Review</option><option value="done">Done</option></select></div>
             <div><label className="label">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Task["priority"] })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></div>
+            <div><label className="label">Due Date</label><input className="input-field" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
           </div>
           <div><label className="label">Tags</label><input className="input-field" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="frontend, bug, feature" /></div>
         </div>

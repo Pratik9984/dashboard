@@ -32,16 +32,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<TeamMember | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (uid: string) => {
+  const fetchProfile = async (uid: string, email?: string | null) => {
     try {
-      const snap = await getDoc(doc(db, "users", uid));
-      if (snap.exists()) {
-        const data = snap.data();
+      let snap = await getDoc(doc(db, "users", uid));
+      let data = snap.exists() ? snap.data() : null;
+      let docId = snap.id;
+
+      if (!data && email) {
+        const q = query(collection(db, "users"), where("email", "==", email));
+        const emailSnap = await getDocs(q);
+        if (!emailSnap.empty) {
+          data = emailSnap.docs[0].data();
+          docId = emailSnap.docs[0].id;
+        }
+      }
+
+      if (data) {
         let role = data.role as UserRole;
+        if (!role) {
+          role = "member";
+        }
         if (data.email?.toLowerCase() === "hello@stackandscale.in") {
           role = "owner";
         }
-        const profileData = { id: snap.id, ...data, role } as TeamMember;
+        const profileData = { id: docId, ...data, role } as TeamMember;
         setProfile(profileData);
         if (typeof window !== "undefined") {
           localStorage.setItem("stackscale_user_profile", JSON.stringify(profileData));
@@ -72,9 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const cached = typeof window !== "undefined" ? localStorage.getItem("stackscale_user_profile") : null;
         if (cached) {
           setLoading(false);
-          fetchProfile(u.uid); // Fetch updated profile in the background
+          fetchProfile(u.uid, u.email); // Fetch updated profile in the background
         } else {
-          await fetchProfile(u.uid);
+          await fetchProfile(u.uid, u.email);
           setLoading(false);
         }
       } else {
@@ -90,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    await fetchProfile(cred.user.uid);
+    await fetchProfile(cred.user.uid, cred.user.email);
   };
 
   const signUp = async (email: string, password: string, name: string, role: UserRole = "member") => {
@@ -147,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
   const resetPassword = async (email: string) => sendPasswordResetEmail(auth, email);
-  const refreshProfile = async () => { if (user) await fetchProfile(user.uid); };
+  const refreshProfile = async () => { if (user) await fetchProfile(user.uid, user.email); };
 
   const isOwner = profile?.role === "owner";
   const isAdmin = profile?.role === "owner" || profile?.role === "admin";

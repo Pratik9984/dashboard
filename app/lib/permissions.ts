@@ -6,6 +6,7 @@ export const PAGE_ACCESS: Record<UserRole, string[]> = {
   admin: ["*"],
   manager: [
     "/dashboard",
+    "/team",
     "/projects",
     "/tasks",
     "/clients",
@@ -14,24 +15,35 @@ export const PAGE_ACCESS: Record<UserRole, string[]> = {
     "/calls",
     "/meetings",
     "/audit",
+    "/analytics",
+    "/sheets",
     "/emails",
     "/web3-forms",
+    "/insights",
     "/pipeline"
   ],
   member: [
     "/dashboard",
+    "/team",
     "/projects",
     "/tasks",
     "/clients",
+    "/leads",
+    "/responses",
+    "/sheets",
     "/calls",
     "/meetings",
     "/audit"
   ],
   viewer: [
     "/dashboard",
+    "/team",
     "/projects",
     "/tasks",
     "/clients",
+    "/leads",
+    "/responses",
+    "/sheets",
     "/calls",
     "/meetings",
     "/audit"
@@ -49,6 +61,8 @@ export function canAccessPage(role: UserRole | undefined, path: string): boolean
   const normalizedPath = cleanPath === "/" ? "/" : cleanPath.replace(/\/$/, "");
 
   const allowedPrefixes = PAGE_ACCESS[role];
+  console.log("canAccessPage check: role =", role, "path =", path, "normalizedPath =", normalizedPath, "allowedPrefixes =", allowedPrefixes);
+  if (!allowedPrefixes) return false;
   if (allowedPrefixes.includes("*")) {
     return true;
   }
@@ -81,6 +95,9 @@ export function canPerformAction(
 
   // Viewer has only read access to allowed pages, never write/delete/create
   if (role === "viewer") {
+    if (module === "web3forms" || module === "emails") {
+      return false;
+    }
     return action === "read";
   }
 
@@ -90,9 +107,10 @@ export function canPerformAction(
       // Admins can view/read all users
       if (action === "read") return true;
       
-      // Only owner can create new members
+      // Admins can create team members (but not owner)
       if (action === "create") {
-        return false;
+        if (!item) return true;
+        return item.role !== "owner";
       }
       
       // Admins cannot update or delete owners or other admins
@@ -111,7 +129,17 @@ export function canPerformAction(
         return true;
       }
     }
-    // manager, member, viewer cannot read or write users
+    
+    if (role === "manager" || role === "member") {
+      if (action === "read") return true;
+      if (action === "update") {
+        if (!item) return true;
+        return item.id === currentUserId;
+      }
+      return false;
+    }
+
+    // viewer cannot write users
     return false;
   }
 
@@ -171,6 +199,25 @@ export function canPerformAction(
     return false;
   }
 
+  // --- Sheets Module ---
+  if (module === "sheets") {
+    if (role === "admin" || role === "owner") return true;
+    if (role === "manager") {
+      return action !== "delete";
+    }
+    if (role === "member") {
+      if (action === "create" || action === "read") return true;
+      if (action === "update" || action === "delete") {
+        if (!item) return true;
+        if (action === "delete") {
+          return item.createdBy === currentUserId;
+        }
+        return item.assignedTo === currentUserId || item.createdBy === currentUserId;
+      }
+    }
+    return false;
+  }
+
   // --- Projects, Clients, Leads, Responses, Web3-Forms Module ---
   const standardModules = ["projects", "clients", "leads", "responses", "web3forms", "emails"];
   if (standardModules.includes(module)) {
@@ -180,7 +227,38 @@ export function canPerformAction(
       return action !== "delete";
     }
     if (role === "member") {
-      // Members can only read standard modules, cannot create, update, or delete
+      if (module === "projects") {
+        if (action === "read" || action === "create") return true;
+        if (action === "update") {
+          if (!item) return true;
+          return item.assignees?.includes(currentUserId) || item.createdBy === currentUserId;
+        }
+        return false;
+      }
+      if (module === "clients") {
+        if (action === "read" || action === "create") return true;
+        if (action === "update") {
+          if (!item) return true;
+          return item.createdBy === currentUserId;
+        }
+        return false;
+      }
+      if (module === "leads") {
+        if (action === "read" || action === "create" || action === "update") return true;
+        return false;
+      }
+      if (module === "responses") {
+        if (action === "read" || action === "create") return true;
+        if (action === "update") {
+          if (!item) return true;
+          return item.assignedTo === currentUserId;
+        }
+        return false;
+      }
+      if (module === "web3forms" || module === "emails") {
+        return false;
+      }
+      // Members can only read other standard modules, cannot create, update, or delete
       return action === "read";
     }
   }
