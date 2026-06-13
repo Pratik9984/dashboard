@@ -201,7 +201,7 @@ export function canPerformAction(
 
   // --- Sheets Module ---
   if (module === "sheets") {
-    if (role === "admin" || role === "owner") return true;
+    if (role === "admin") return true;
     if (role === "manager") {
       return action !== "delete";
     }
