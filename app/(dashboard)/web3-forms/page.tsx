@@ -3,6 +3,8 @@ import React, { useState, useMemo } from "react";
 import { Eye, Trash2, Archive, ExternalLink } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { Web3FormResponse } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
@@ -13,14 +15,25 @@ import toast from "react-hot-toast";
 export default function Web3FormsPage() {
   const { data: submissions, loading } = useCollection<Web3FormResponse>("web3forms");
   const { update, remove } = useFirestore("web3forms");
+  const { profile: currentUserProfile } = useAuth();
   const [selected, setSelected] = useState<Web3FormResponse | null>(null);
   const [filter, setFilter] = useState("all");
 
   const updateStatus = async (id: string, status: string) => {
-    try { await update(id, { status }); toast.success(`Marked as ${status}`); } catch { toast.error("Failed"); }
+    try {
+      if (!canPerformAction(currentUserProfile?.role, "web3forms", "update")) {
+        toast.error("Unauthorized action");
+        return;
+      }
+      await update(id, { status }); toast.success(`Marked as ${status}`);
+    } catch { toast.error("Failed"); }
   };
 
   const handleDelete = async (id: string) => {
+    if (!canPerformAction(currentUserProfile?.role, "web3forms", "delete")) {
+      toast.error("Unauthorized action");
+      return;
+    }
     if (!confirm("Delete this submission?")) return;
     try { await remove(id); setSelected(null); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
@@ -37,14 +50,23 @@ export default function Web3FormsPage() {
     { key: "status", label: "Status", render: (s) => <StatusBadge status={s.status} /> },
     { key: "submittedAt", label: "Submitted", render: (s) => <span className="text-sm text-slate-500">{timeAgo(s.submittedAt as Date)}</span> },
     { key: "data", label: "Fields", render: (s) => <span className="text-sm text-slate-500">{Object.keys(s.data).length} fields</span> },
-    { key: "actions", label: "", render: (s) => (
-      <div className="flex items-center gap-1">
-        <button onClick={(e) => { e.stopPropagation(); setSelected(s); if (s.status === "new") updateStatus(s.id, "read"); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600"><Eye className="w-3.5 h-3.5" /></button>
-        <button onClick={(e) => { e.stopPropagation(); updateStatus(s.id, "archived"); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-amber-600"><Archive className="w-3.5 h-3.5" /></button>
-        <button onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-      </div>
-    )},
-  ], []);
+    { key: "actions", label: "", render: (s) => {
+      const canUpdate = canPerformAction(currentUserProfile?.role, "web3forms", "update");
+      const canDelete = canPerformAction(currentUserProfile?.role, "web3forms", "delete");
+
+      return (
+        <div className="flex items-center gap-1">
+          <button onClick={(e) => { e.stopPropagation(); setSelected(s); if (s.status === "new" && canUpdate) updateStatus(s.id, "read"); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600"><Eye className="w-3.5 h-3.5" /></button>
+          {canUpdate && (
+            <button onClick={(e) => { e.stopPropagation(); updateStatus(s.id, "archived"); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-amber-600"><Archive className="w-3.5 h-3.5" /></button>
+          )}
+          {canDelete && (
+            <button onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      );
+    }},
+  ], [currentUserProfile?.role]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading submissions..." />;
 
@@ -72,7 +94,9 @@ export default function Web3FormsPage() {
       {/* Detail Modal */}
       <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Submission Details" size="lg"
         footer={<>
-          <button onClick={() => { if (selected) updateStatus(selected.id, "processed"); setSelected(null); }} className="btn-primary">Mark Processed</button>
+          {canPerformAction(currentUserProfile?.role, "web3forms", "update") && (
+            <button onClick={() => { if (selected) updateStatus(selected.id, "processed"); setSelected(null); }} className="btn-primary">Mark Processed</button>
+          )}
           <button onClick={() => setSelected(null)} className="btn-secondary">Close</button>
         </>}>
         {selected && (

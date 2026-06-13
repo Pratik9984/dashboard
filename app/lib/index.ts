@@ -1,6 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 
-export type UserRole = "admin" | "member";
+export type UserRole = "owner" | "admin" | "manager" | "member" | "viewer";
 
 export interface TeamMember {
   id: string;
@@ -69,7 +69,7 @@ export interface Client {
   createdAt: Timestamp | Date;
 }
 
-export interface PipelineLead {
+export interface Lead {
   id: string;
   name: string;
   company?: string;
@@ -158,11 +158,15 @@ export interface EmailRecord {
   cc?: string[];
   subject: string;
   body: string;
-  status: "sent" | "received" | "draft" | "failed";
+  html?: string;
+  attachments?: { name: string; url: string; size: number; type: string }[];
+  status: "sent" | "received" | "draft" | "failed" | "trash";
   tags: string[];
   threadId?: string;
   date: Timestamp | Date;
   readAt?: Timestamp | Date;
+  read: boolean;
+  starred: boolean;
 }
 
 export interface Web3FormResponse {
@@ -181,7 +185,7 @@ export interface SheetData {
   id: string;
   name: string;
   description?: string;
-  type: "projects" | "clients" | "pipeline" | "responses" | "tasks" | "calls" | "custom";
+  type: "projects" | "clients" | "leads" | "responses" | "tasks" | "calls" | "custom";
   columns: string[];
   rows: Record<string, string | number | boolean>[];
   createdAt: Timestamp | Date;

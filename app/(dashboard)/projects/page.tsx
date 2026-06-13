@@ -3,6 +3,8 @@ import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, Calendar, Users as UsersIcon } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { Project } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
@@ -14,6 +16,7 @@ import { Timestamp } from "firebase/firestore";
 export default function ProjectsPage() {
   const { data: projects, loading } = useCollection<Project>("projects");
   const { add, update, remove } = useFirestore("projects");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [filter, setFilter] = useState("all");
@@ -24,10 +27,16 @@ export default function ProjectsPage() {
 
   const handleSave = async () => {
     try {
+      const action = editing ? "update" : "create";
+      if (!canPerformAction(currentUserProfile?.role, "projects", action, editing || undefined, currentUserProfile?.id)) {
+        toast.error("Unauthorized action");
+        return;
+      }
+
       const data = {
         ...form, budget: form.budget ? parseFloat(form.budget) : 0,
         tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-        assignees: [], startDate: Timestamp.now(), dueDate: Timestamp.now(), createdBy: "admin",
+        assignees: [], startDate: Timestamp.now(), dueDate: Timestamp.now(), createdBy: currentUserProfile?.id || "admin",
       };
       if (editing) { await update(editing.id, data); toast.success("Project updated"); }
       else { await add(data); toast.success("Project created"); }
@@ -36,6 +45,12 @@ export default function ProjectsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const p = projects.find((item) => item.id === id);
+    if (!p || !canPerformAction(currentUserProfile?.role, "projects", "delete", p)) {
+      toast.error("Unauthorized action");
+      return;
+    }
+
     if (!confirm("Delete this project?")) return;
     try { await remove(id); toast.success("Project deleted"); } catch { toast.error("Failed to delete"); }
   };
@@ -58,13 +73,22 @@ export default function ProjectsPage() {
       </div>
     )},
     { key: "dueDate", label: "Due Date", render: (p) => <span className="text-sm text-slate-500">{formatDate(p.dueDate as Date)}</span> },
-    { key: "actions", label: "", render: (p) => (
-      <div className="flex items-center gap-1">
-        <button onClick={(e) => { e.stopPropagation(); openEdit(p); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-        <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-      </div>
-    )},
-  ], []);
+    { key: "actions", label: "", render: (p) => {
+      const canEdit = canPerformAction(currentUserProfile?.role, "projects", "update", p, currentUserProfile?.id);
+      const canDelete = canPerformAction(currentUserProfile?.role, "projects", "delete", p);
+      if (!canEdit && !canDelete) return null;
+      return (
+        <div className="flex items-center gap-1">
+          {canEdit && (
+            <button onClick={(e) => { e.stopPropagation(); openEdit(p); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
+          )}
+          {canDelete && (
+            <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      );
+    }},
+  ], [currentUserProfile?.role, currentUserProfile?.id]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading projects..." />;
 
@@ -86,7 +110,7 @@ export default function ProjectsPage() {
         data={filtered as any[]}
         searchKeys={["name", "clientName", "description"]}
         searchPlaceholder="Search projects..."
-        actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> New Project</button>}
+        actions={canPerformAction(currentUserProfile?.role, "projects", "create") ? <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> New Project</button> : undefined}
       />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Project" : "New Project"} size="lg"

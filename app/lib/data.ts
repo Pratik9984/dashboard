@@ -5,29 +5,29 @@ export const CHART_COLORS = {
 };
 
 export const REVENUE_DATA = [
-  { month: "Jan", revenue: 85000, projects: 3, clients: 2 },
-  { month: "Feb", revenue: 120000, projects: 4, clients: 3 },
-  { month: "Mar", revenue: 95000, projects: 3, clients: 2 },
-  { month: "Apr", revenue: 165000, projects: 6, clients: 4 },
-  { month: "May", revenue: 140000, projects: 5, clients: 3 },
-  { month: "Jun", revenue: 190000, projects: 7, clients: 5 },
-  { month: "Jul", revenue: 210000, projects: 8, clients: 5 },
-  { month: "Aug", revenue: 175000, projects: 6, clients: 4 },
-  { month: "Sep", revenue: 230000, projects: 9, clients: 6 },
-  { month: "Oct", revenue: 260000, projects: 10, clients: 7 },
-  { month: "Nov", revenue: 245000, projects: 9, clients: 6 },
-  { month: "Dec", revenue: 310000, projects: 12, clients: 8 },
+  { month: "Jan", revenue: 0, projects: 0, clients: 0 },
+  { month: "Feb", revenue: 0, projects: 0, clients: 0 },
+  { month: "Mar", revenue: 0, projects: 0, clients: 0 },
+  { month: "Apr", revenue: 0, projects: 0, clients: 0 },
+  { month: "May", revenue: 0, projects: 0, clients: 0 },
+  { month: "Jun", revenue: 0, projects: 0, clients: 0 },
+  { month: "Jul", revenue: 0, projects: 0, clients: 0 },
+  { month: "Aug", revenue: 0, projects: 0, clients: 0 },
+  { month: "Sep", revenue: 0, projects: 0, clients: 0 },
+  { month: "Oct", revenue: 0, projects: 0, clients: 0 },
+  { month: "Nov", revenue: 0, projects: 0, clients: 0 },
+  { month: "Dec", revenue: 0, projects: 0, clients: 0 },
 ];
 
 export const TRAFFIC_DATA = [
-  { name: "Organic Search", value: 42, color: "#6366F1" },
-  { name: "Direct", value: 28, color: "#8B5CF6" },
-  { name: "Social Media", value: 18, color: "#06B6D4" },
-  { name: "Referral", value: 8, color: "#10B981" },
-  { name: "Email", value: 4, color: "#F59E0B" },
+  { name: "Organic Search", value: 0, color: "#6366F1" },
+  { name: "Direct", value: 0, color: "#8B5CF6" },
+  { name: "Social Media", value: 0, color: "#06B6D4" },
+  { name: "Referral", value: 0, color: "#10B981" },
+  { name: "Email", value: 0, color: "#F59E0B" },
 ];
 
-export const PIPELINE_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
+export const LEAD_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
 
 export const SAMPLE_INSIGHTS = Array.from({ length: 30 }, (_, i) => ({
   date: new Date(Date.now() - i * 86400000).toISOString().slice(0, 10),

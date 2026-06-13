@@ -90,14 +90,20 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
-              <div>
-                <label className="label">Full Name</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="input-field" placeholder="John Doe" required />
-              </div>
+              <>
+                <div className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 mb-4 font-medium flex flex-col gap-1">
+                  <span>⚠️ Important Notice:</span>
+                  <span className="text-slate-600 font-normal">Only emails pre-registered by the administrator/owner can create a new account. Please contact the administrator to register your email first.</span>
+                </div>
+                <div>
+                  <label className="label">Full Name</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="input-field" placeholder="John Doe" required />
+                </div>
+              </>
             )}
             <div>
               <label className="label">Email Address</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field" placeholder="you@stackandscale.com" required />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field" placeholder="you@stackandscale.in" required />
             </div>
             <div>
               <label className="label">Password</label>

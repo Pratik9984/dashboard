@@ -3,6 +3,8 @@ import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, PhoneCall, PhoneIncoming, PhoneOutgoing, MessageSquare, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { CallLog } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
@@ -13,17 +15,24 @@ import toast from "react-hot-toast";
 export default function CallsPage() {
   const { data: calls, loading } = useCollection<CallLog>("calls");
   const { add, update, remove } = useFirestore("calls");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<CallLog | null>(null);
   const [filter, setFilter] = useState("all");
   const [form, setForm] = useState({ type: "call" as CallLog["type"], contactName: "", contactEmail: "", contactPhone: "", direction: "outbound" as CallLog["direction"], status: "answered" as CallLog["status"], duration: "", notes: "", recordedBy: "" });
 
-  const openAdd = () => { setEditing(null); setForm({ type: "call", contactName: "", contactEmail: "", contactPhone: "", direction: "outbound", status: "answered", duration: "", notes: "", recordedBy: "" }); setShowModal(true); };
+  const openAdd = () => { setEditing(null); setForm({ type: "call", contactName: "", contactEmail: "", contactPhone: "", direction: "outbound", status: "answered", duration: "", notes: "", recordedBy: currentUserProfile?.name || "" }); setShowModal(true); };
   const openEdit = (c: CallLog) => { setEditing(c); setForm({ type: c.type, contactName: c.contactName, contactEmail: c.contactEmail || "", contactPhone: c.contactPhone || "", direction: c.direction, status: c.status, duration: c.duration?.toString() || "", notes: c.notes || "", recordedBy: c.recordedBy }); setShowModal(true); };
 
   const handleSave = async () => {
     try {
-      const data = { ...form, duration: form.duration ? parseInt(form.duration) : undefined, date: new Date() };
+      const action = editing ? "update" : "create";
+      if (!canPerformAction(currentUserProfile?.role, "calls", action, editing || undefined, currentUserProfile?.id)) {
+        toast.error("Unauthorized action");
+        return;
+      }
+
+      const data = { ...form, duration: form.duration ? parseInt(form.duration) : undefined, date: new Date(), recordedBy: form.recordedBy || currentUserProfile?.name || "admin" };
       if (editing) { await update(editing.id, data); toast.success("Updated"); }
       else { await add(data); toast.success("Log added"); }
       setShowModal(false);
@@ -31,6 +40,12 @@ export default function CallsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const call = calls.find((c) => c.id === id);
+    if (!call || !canPerformAction(currentUserProfile?.role, "calls", "delete", call)) {
+      toast.error("Unauthorized action");
+      return;
+    }
+
     if (!confirm("Delete this log?")) return;
     try { await remove(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
@@ -70,14 +85,23 @@ export default function CallsPage() {
     { key: "duration", label: "Duration", render: (c) => <span className="text-sm text-slate-600">{c.duration ? `${Math.floor(c.duration / 60)}m ${c.duration % 60}s` : "—"}</span> },
     { key: "date", label: "Date", render: (c) => <span className="text-sm text-slate-500">{formatDate(c.date as Date)}</span> },
     {
-      key: "actions", label: "", render: (c) => (
-        <div className="flex items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-          <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-        </div>
-      )
+      key: "actions", label: "", render: (c) => {
+        const canEdit = canPerformAction(currentUserProfile?.role, "calls", "update", c, currentUserProfile?.id);
+        const canDelete = canPerformAction(currentUserProfile?.role, "calls", "delete", c);
+        if (!canEdit && !canDelete) return null;
+        return (
+          <div className="flex items-center gap-1">
+            {canEdit && (
+              <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
+            )}
+            {canDelete && (
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+            )}
+          </div>
+        );
+      }
     },
-  ], []);
+  ], [currentUserProfile?.role, currentUserProfile?.id]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading call logs..." />;
 
@@ -97,11 +121,11 @@ export default function CallsPage() {
         data={filtered as any[]}
         searchKeys={["contactName", "contactPhone", "notes"]}
         searchPlaceholder="Search calls..."
-        actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Log Call</button>}
+        actions={canPerformAction(currentUserProfile?.role, "calls", "create") ? <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Log Call</button> : undefined}
       />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Log" : "Log Call/Message"}
-        footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button><button onClick={handleSave} className="btn-primary">Save</button></>}>
+        footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>{canPerformAction(currentUserProfile?.role, "calls", editing ? "update" : "create", editing || undefined, currentUserProfile?.id) && <button onClick={handleSave} className="btn-primary">Save</button>}</>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div><label className="label">Type</label><select className="input-field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CallLog["type"] })}><option value="call">Call</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="telegram">Telegram</option></select></div>

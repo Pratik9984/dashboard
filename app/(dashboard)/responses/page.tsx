@@ -3,6 +3,8 @@ import React, { useState } from "react";
 import { Plus, Edit2, Trash2, Mail, Star, Archive, Reply } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { Response } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
 import LoadingSpinner from "@/app/components/LoadingSpinner";
@@ -13,6 +15,7 @@ import toast from "react-hot-toast";
 export default function ResponsesPage() {
   const { data: responses, loading } = useCollection<Response>("responses");
   const { add, update, remove } = useFirestore("responses");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [selected, setSelected] = useState<Response | null>(null);
   const [filter, setFilter] = useState("all");
@@ -22,14 +25,29 @@ export default function ResponsesPage() {
   const openView = (r: Response) => { setSelected(r); if (r.status === "new") update(r.id, { status: "read" }); };
 
   const handleSave = async () => {
-    try { await add({ ...form, status: "new" }); toast.success("Response added"); setShowModal(false); } catch { toast.error("Failed to save"); }
+    try {
+      if (!canPerformAction(currentUserProfile?.role, "responses", "create")) {
+        toast.error("Unauthorized action");
+        return;
+      }
+      await add({ ...form, status: "new" }); toast.success("Response added"); setShowModal(false);
+    } catch { toast.error("Failed to save"); }
   };
 
   const updateStatus = async (id: string, status: string) => {
-    try { await update(id, { status }); toast.success(`Marked as ${status}`); } catch { toast.error("Failed to update"); }
+    try {
+      if (!canPerformAction(currentUserProfile?.role, "responses", "update")) {
+        toast.error("Unauthorized action");
+        return;
+      }
+      await update(id, { status }); toast.success(`Marked as ${status}`); } catch { toast.error("Failed to update"); }
   };
 
   const handleDelete = async (id: string) => {
+    if (!canPerformAction(currentUserProfile?.role, "responses", "delete")) {
+      toast.error("Unauthorized action");
+      return;
+    }
     if (!confirm("Delete this response?")) return;
     try { await remove(id); toast.success("Deleted"); setSelected(null); } catch { toast.error("Failed to delete"); }
   };
@@ -37,6 +55,8 @@ export default function ResponsesPage() {
   const filtered = filter === "all" ? responses : responses.filter((r) => r.status === filter);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading responses..." />;
+
+  const canAdd = canPerformAction(currentUserProfile?.role, "responses", "create");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -48,7 +68,9 @@ export default function ResponsesPage() {
             </button>
           ))}
         </div>
-        <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add</button>
+        {canAdd && (
+          <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add</button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -97,9 +119,15 @@ export default function ResponsesPage() {
                 <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{selected.message}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => updateStatus(selected.id, "replied")} className="btn-primary"><Reply className="w-4 h-4" /> Mark Replied</button>
-                <button onClick={() => updateStatus(selected.id, "archived")} className="btn-secondary"><Archive className="w-4 h-4" /> Archive</button>
-                <button onClick={() => handleDelete(selected.id)} className="btn-ghost text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4" /> Delete</button>
+                {canPerformAction(currentUserProfile?.role, "responses", "update") && (
+                  <>
+                    <button onClick={() => updateStatus(selected.id, "replied")} className="btn-primary"><Reply className="w-4 h-4" /> Mark Replied</button>
+                    <button onClick={() => updateStatus(selected.id, "archived")} className="btn-secondary"><Archive className="w-4 h-4" /> Archive</button>
+                  </>
+                )}
+                {canPerformAction(currentUserProfile?.role, "responses", "delete") && (
+                  <button onClick={() => handleDelete(selected.id)} className="btn-ghost text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4" /> Delete</button>
+                )}
               </div>
             </div>
           ) : (

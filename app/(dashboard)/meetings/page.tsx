@@ -3,6 +3,8 @@ import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, Video, MapPin, Clock, Users as UsersIcon, ExternalLink } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { Meeting } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
@@ -14,6 +16,7 @@ import { Timestamp } from "firebase/firestore";
 export default function MeetingsPage() {
   const { data: meetings, loading } = useCollection<Meeting>("meetings");
   const { add, update, remove } = useFirestore("meetings");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Meeting | null>(null);
   const [filter, setFilter] = useState("all");
@@ -24,7 +27,13 @@ export default function MeetingsPage() {
 
   const handleSave = async () => {
     try {
-      const data = { ...form, attendees: [], attendeeNames: form.attendeeNames.split(",").map((n) => n.trim()).filter(Boolean), actionItems: form.actionItems.split("\n").filter(Boolean), date: Timestamp.now(), createdBy: "admin" };
+      const action = editing ? "update" : "create";
+      if (!canPerformAction(currentUserProfile?.role, "meetings", action, editing || undefined, currentUserProfile?.id)) {
+        toast.error("Unauthorized action");
+        return;
+      }
+
+      const data = { ...form, attendees: [], attendeeNames: form.attendeeNames.split(",").map((n) => n.trim()).filter(Boolean), actionItems: form.actionItems.split("\n").filter(Boolean), date: Timestamp.now(), createdBy: currentUserProfile?.id || "admin" };
       if (editing) { await update(editing.id, data); toast.success("Meeting updated"); }
       else { await add(data); toast.success("Meeting scheduled"); }
       setShowModal(false);
@@ -32,6 +41,12 @@ export default function MeetingsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const meeting = meetings.find((m) => m.id === id);
+    if (!meeting || !canPerformAction(currentUserProfile?.role, "meetings", "delete", meeting)) {
+      toast.error("Unauthorized action");
+      return;
+    }
+
     if (!confirm("Delete this meeting?")) return;
     try { await remove(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
@@ -56,13 +71,22 @@ export default function MeetingsPage() {
     { key: "duration", label: "Duration", render: (m) => <span className="text-sm text-slate-600">{m.duration}min</span> },
     { key: "date", label: "Date", render: (m) => <span className="text-sm text-slate-500">{formatDate(m.date as Date)}</span> },
     { key: "meetingUrl", label: "Link", render: (m) => m.meetingUrl ? <a href={m.meetingUrl} target="_blank" className="text-primary-600 hover:text-primary-700"><ExternalLink className="w-4 h-4" /></a> : <span className="text-slate-300">—</span> },
-    { key: "actions", label: "", render: (m) => (
-      <div className="flex items-center gap-1">
-        <button onClick={(e) => { e.stopPropagation(); openEdit(m); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-        <button onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-      </div>
-    )},
-  ], []);
+    { key: "actions", label: "", render: (m) => {
+      const canEdit = canPerformAction(currentUserProfile?.role, "meetings", "update", m, currentUserProfile?.id);
+      const canDelete = canPerformAction(currentUserProfile?.role, "meetings", "delete", m);
+      if (!canEdit && !canDelete) return null;
+      return (
+        <div className="flex items-center gap-1">
+          {canEdit && (
+            <button onClick={(e) => { e.stopPropagation(); openEdit(m); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
+          )}
+          {canDelete && (
+            <button onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      );
+    }},
+  ], [currentUserProfile?.role, currentUserProfile?.id]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading meetings..." />;
 
@@ -77,10 +101,10 @@ export default function MeetingsPage() {
       </div>
       {/* FIX: Cast data collections to any[] to bypass strict generic enforcement */}
       <DataTable columns={columns as any[]} data={filtered as any[]} searchKeys={["title", "description"]} searchPlaceholder="Search meetings..."
-        actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Schedule</button>} />
+        actions={canPerformAction(currentUserProfile?.role, "meetings", "create") ? <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Schedule</button> : undefined} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Meeting" : "Schedule Meeting"} size="lg"
-        footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button><button onClick={handleSave} className="btn-primary">Save</button></>}>
+        footer={<><button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>{canPerformAction(currentUserProfile?.role, "meetings", editing ? "update" : "create", editing || undefined, currentUserProfile?.id) && <button onClick={handleSave} className="btn-primary">Save</button>}</>}>
         <div className="space-y-4">
           <div><label className="label">Title</label><input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
           <div><label className="label">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>

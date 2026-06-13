@@ -24,7 +24,7 @@ export default function DashboardPage() {
     { label: "Completed", value: stats.completedProjects, icon: <CheckSquare className="w-5 h-5" />, color: "emerald" },
     { label: "Total Clients", value: stats.totalClients, icon: <Building2 className="w-5 h-5" />, color: "blue", trend: { value: 5, label: "this quarter" } },
     { label: "Team Members", value: stats.teamMembers, icon: <Users className="w-5 h-5" />, color: "violet" },
-    { label: "Pipeline Leads", value: stats.pipelineLeads, icon: <GitBranch className="w-5 h-5" />, color: "cyan", trend: { value: 15, label: "new" } },
+    { label: "Total Leads", value: stats.pipelineLeads, icon: <GitBranch className="w-5 h-5" />, color: "cyan", trend: { value: 15, label: "new" } },
     { label: "Pending Responses", value: stats.pendingResponses, icon: <MessageSquare className="w-5 h-5" />, color: "rose" },
     { label: "Upcoming Meetings", value: stats.upcomingMeetings, icon: <CalendarDays className="w-5 h-5" />, color: "amber" },
     { label: "Tasks Done", value: stats.tasksCompleted, icon: <Target className="w-5 h-5" />, color: "emerald" },
@@ -114,7 +114,7 @@ export default function DashboardPage() {
               { label: "Task Completion Rate", value: stats.tasksCompleted + stats.tasksPending > 0 ? Math.round((stats.tasksCompleted / (stats.tasksCompleted + stats.tasksPending)) * 100) : 0, color: "bg-primary-600" },
               { label: "Project Completion", value: stats.totalProjects > 0 ? Math.round((stats.completedProjects / stats.totalProjects) * 100) : 0, color: "bg-emerald-500" },
               { label: "Lead Conversion", value: stats.pipelineLeads > 0 ? Math.round(((stats.pipelineLeads - stats.newLeads) / stats.pipelineLeads) * 100) : 0, color: "bg-violet-500" },
-              { label: "Response Rate", value: 78, color: "bg-amber-500" },
+              { label: "Response Rate", value: stats.totalResponses > 0 ? Math.round((stats.repliedResponses / stats.totalResponses) * 100) : 0, color: "bg-amber-500" },
             ].map((item, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1.5">

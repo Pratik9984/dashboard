@@ -3,6 +3,8 @@ import React, { useState, useMemo } from "react";
 import { Plus, Edit2, Trash2, Globe, Mail, Phone } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { Client } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import DataTable, { Column } from "@/app/components/DataTable";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
@@ -13,6 +15,7 @@ import toast from "react-hot-toast";
 export default function ClientsPage() {
   const { data: clients, loading } = useCollection<Client>("clients");
   const { add, update, remove } = useFirestore("clients");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [filter, setFilter] = useState("all");
@@ -23,6 +26,12 @@ export default function ClientsPage() {
 
   const handleSave = async () => {
     try {
+      const action = editing ? "update" : "create";
+      if (!canPerformAction(currentUserProfile?.role, "clients", action, editing || undefined, currentUserProfile?.id)) {
+        toast.error("Unauthorized action");
+        return;
+      }
+
       if (editing) { await update(editing.id, form); toast.success("Client updated"); }
       else { await add(form); toast.success("Client added"); }
       setShowModal(false);
@@ -30,6 +39,12 @@ export default function ClientsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const client = clients.find((c) => c.id === id);
+    if (!client || !canPerformAction(currentUserProfile?.role, "clients", "delete", client)) {
+      toast.error("Unauthorized action");
+      return;
+    }
+
     if (!confirm("Delete this client?")) return;
     try { await remove(id); toast.success("Client deleted"); } catch { toast.error("Failed to delete"); }
   };
@@ -60,15 +75,24 @@ export default function ClientsPage() {
     { key: "totalProjects", label: "Projects", sortable: true, render: (c) => <span className="text-sm font-medium text-slate-700">{c.totalProjects}</span> },
     { key: "totalValue", label: "Value", sortable: true, render: (c) => <span className="text-sm font-semibold text-slate-800">{formatCurrency(c.totalValue)}</span> },
     {
-      key: "actions", label: "", render: (c) => (
-        <div className="flex items-center gap-1">
-          {c.website && <a href={c.website} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-500"><Globe className="w-3.5 h-3.5" /></a>}
-          <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-          <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-        </div>
-      )
+      key: "actions", label: "", render: (c) => {
+        const canEdit = canPerformAction(currentUserProfile?.role, "clients", "update", c, currentUserProfile?.id);
+        const canDelete = canPerformAction(currentUserProfile?.role, "clients", "delete", c);
+
+        return (
+          <div className="flex items-center gap-1">
+            {c.website && <a href={c.website} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-500"><Globe className="w-3.5 h-3.5" /></a>}
+            {canEdit && (
+              <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
+            )}
+            {canDelete && (
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+            )}
+          </div>
+        );
+      }
     },
-  ], []);
+  ], [currentUserProfile?.role, currentUserProfile?.id]);
 
   if (loading) return <LoadingSpinner size="lg" message="Loading clients..." />;
 
@@ -88,7 +112,7 @@ export default function ClientsPage() {
         data={filtered as any[]}
         searchKeys={["name", "company", "email", "industry"]}
         searchPlaceholder="Search clients..."
-        actions={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Client</button>}
+        actions={canPerformAction(currentUserProfile?.role, "clients", "create") ? <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Client</button> : undefined}
       />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Client" : "Add Client"} size="lg"

@@ -3,6 +3,8 @@ import React, { useState } from "react";
 import { Plus, Edit2, Trash2, Check, Circle, Clock, AlertCircle } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { Task } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
 import StatusBadge from "@/app/components/StatusBadge";
 import LoadingSpinner from "@/app/components/LoadingSpinner";
@@ -14,6 +16,7 @@ import { Timestamp } from "firebase/firestore";
 export default function TasksPage() {
   const { data: tasks, loading } = useCollection<Task>("tasks");
   const { add, update, remove } = useFirestore("tasks");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [filter, setFilter] = useState("all");
@@ -24,7 +27,13 @@ export default function TasksPage() {
 
   const handleSave = async () => {
     try {
-      const data = { ...form, tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean), projectId: "", assignedTo: "", createdBy: "admin" };
+      const action = editing ? "update" : "create";
+      if (!canPerformAction(currentUserProfile?.role, "tasks", action, editing || undefined, currentUserProfile?.id)) {
+        toast.error("Unauthorized action");
+        return;
+      }
+
+      const data = { ...form, tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean), projectId: "", assignedTo: "", createdBy: currentUserProfile?.id || "admin" };
       if (editing) { await update(editing.id, data); toast.success("Task updated"); }
       else { await add(data); toast.success("Task created"); }
       setShowModal(false);
@@ -32,11 +41,25 @@ export default function TasksPage() {
   };
 
   const toggleDone = async (t: Task) => {
+    const canEdit = canPerformAction(currentUserProfile?.role, "tasks", "update", t, currentUserProfile?.id) ||
+      (currentUserProfile?.role === "member" && t.assigneeName?.toLowerCase() === currentUserProfile?.name?.toLowerCase());
+    
+    if (!canEdit) {
+      toast.error("Unauthorized to modify this task");
+      return;
+    }
+
     const newStatus = t.status === "done" ? "todo" : "done";
     try { await update(t.id, { status: newStatus, completedAt: newStatus === "done" ? Timestamp.now() : null }); toast.success(newStatus === "done" ? "Task completed! ✓" : "Task reopened"); } catch { toast.error("Failed to update"); }
   };
 
   const handleDelete = async (id: string) => {
+    const t = tasks.find((item) => item.id === id);
+    if (!t || !canPerformAction(currentUserProfile?.role, "tasks", "delete", t)) {
+      toast.error("Unauthorized action");
+      return;
+    }
+
     if (!confirm("Delete this task?")) return;
     try { await remove(id); toast.success("Task deleted"); } catch { toast.error("Failed to delete"); }
   };
@@ -55,6 +78,8 @@ export default function TasksPage() {
 
   if (loading) return <LoadingSpinner size="lg" message="Loading tasks..." />;
 
+  const canAdd = canPerformAction(currentUserProfile?.role, "tasks", "create");
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Status tabs */}
@@ -66,36 +91,54 @@ export default function TasksPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Task</button>
+        {canAdd && (
+          <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Task</button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title="No tasks" message="Create your first task to start tracking work." action={<button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Task</button>} />
+        <EmptyState title="No tasks" message="Create your first task to start tracking work." action={canAdd ? <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Task</button> : undefined} />
       ) : (
         <div className="card divide-y divide-slate-100">
-          {filtered.map((t) => (
-            <div key={t.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50/50 transition-colors group">
-              <button onClick={() => toggleDone(t)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.status === "done" ? "bg-emerald-500 border-emerald-500" : "border-slate-300 hover:border-primary-400"}`}>
-                {t.status === "done" && <Check className="w-3 h-3 text-white" />}
-              </button>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className={`text-sm font-medium ${t.status === "done" ? "line-through text-slate-400" : "text-slate-800"}`}>{t.title}</p>
-                  <StatusBadge status={t.priority} />
+          {filtered.map((t) => {
+            const canEdit = canPerformAction(currentUserProfile?.role, "tasks", "update", t, currentUserProfile?.id) ||
+              (currentUserProfile?.role === "member" && t.assigneeName?.toLowerCase() === currentUserProfile?.name?.toLowerCase());
+            const canDelete = canPerformAction(currentUserProfile?.role, "tasks", "delete", t);
+
+            return (
+              <div key={t.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50/50 transition-colors group">
+                <button 
+                  disabled={!canEdit}
+                  onClick={() => toggleDone(t)} 
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${!canEdit ? "opacity-60 cursor-not-allowed" : ""} ${t.status === "done" ? "bg-emerald-500 border-emerald-500" : "border-slate-300 hover:border-primary-400"}`}
+                >
+                  {t.status === "done" && <Check className="w-3 h-3 text-white" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm font-medium ${t.status === "done" ? "line-through text-slate-400" : "text-slate-800"}`}>{t.title}</p>
+                    <StatusBadge status={t.priority} />
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                    {t.projectName && <span>{t.projectName}</span>}
+                    {t.assigneeName && <span>→ {t.assigneeName}</span>}
+                    {t.dueDate && <span>Due: {formatDate(t.dueDate as Date)}</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                  {t.projectName && <span>{t.projectName}</span>}
-                  {t.assigneeName && <span>→ {t.assigneeName}</span>}
-                  {t.dueDate && <span>Due: {formatDate(t.dueDate as Date)}</span>}
-                </div>
+                {statusIcon(t.status)}
+                {(canEdit || canDelete) && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {canEdit && (
+                      <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
+                    )}
+                    {canDelete && (
+                      <button onClick={() => handleDelete(t.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    )}
+                  </div>
+                )}
               </div>
-              {statusIcon(t.status)}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-                <button onClick={() => handleDelete(t.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

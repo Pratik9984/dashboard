@@ -9,6 +9,7 @@ import {
   ChevronRight, LogOut, Layers,
 } from "lucide-react";
 import { useAuth } from "@/app/lib/AuthContext";
+import { canAccessPage } from "@/app/lib/permissions";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -16,7 +17,7 @@ const NAV_ITEMS = [
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Tasks", href: "/tasks", icon: CheckSquare },
   { label: "Clients", href: "/clients", icon: Building2 },
-  { label: "Pipeline", href: "/pipeline", icon: GitBranch },
+  { label: "Leads", href: "/leads", icon: GitBranch },
   { label: "Responses", href: "/responses", icon: MessageSquare },
   { label: "Calls", href: "/calls", icon: Phone },
   { label: "Meetings", href: "/meetings", icon: CalendarDays },
@@ -58,7 +59,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 py-3 px-2.5 overflow-y-auto space-y-0.5">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => canAccessPage(profile?.role, item.href)).map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
           return (
             <Link

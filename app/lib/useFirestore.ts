@@ -7,6 +7,7 @@ import {
 } from "./firebase";
 import { QueryConstraint } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from "./AuthContext";
 
 // Global in-memory cache for Firestore collection queries, documents, and dashboard stats
 const collectionCache: Record<string, any> = {};
@@ -161,14 +162,37 @@ export function useCollection<T extends { id: string }>(
   collectionName: string,
   constraints: QueryConstraint[] = []
 ) {
+  const { user } = useAuth();
+  const userId = user?.uid || "";
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const constraintsKey = getConstraintsCacheKey(constraints);
-  const cacheKey = `${collectionName}:${constraintsKey}`;
+  const cacheKey = `${collectionName}:${constraintsKey}:${userId}`;
 
   // Initialize state to empty/loading for SSR hydration compatibility
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    try {
+      const ref = collection(db, collectionName);
+      // Directly spread the original QueryConstraint objects to prevent corruption
+      const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];
+      
+      setCachedCollection(cacheKey, docs);
+      setData(docs);
+      setError(null);
+    } catch (err: any) {
+      console.error(`Error loading collection ${collectionName}:`, err);
+      setError(err.message || "Failed to load collection");
+    } finally {
+      setLoading(false);
+    }
+  }, [collectionName, constraintsKey, cacheKey]);
 
   useEffect(() => {
     // Client-side cache check runs on mount to populate state immediately before repaint
@@ -176,90 +200,46 @@ export function useCollection<T extends { id: string }>(
     if (cachedData) {
       setData(cachedData);
       setLoading(false);
+      // Trigger background update (AJAX sync)
+      fetchData(false);
     } else {
-      setLoading(true);
+      fetchData(true);
     }
+  }, [cacheKey, fetchData]);
 
-    let listener = activeCollectionListeners[cacheKey];
-
-    const onDataUpdate = (newData: T[]) => {
-      setData(newData);
-      setLoading(false);
-      setError(null);
-    };
-
-    const onErrorUpdate = (newError: string) => {
-      setError(newError);
-      setLoading(false);
-    };
-
-    if (!listener) {
-      const ref = collection(db, collectionName);
-      // Directly spread the original QueryConstraint objects to prevent corruption
-      const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
-
-      const subscribers = new Set<(data: any[]) => void>();
-      const errorSubscribers = new Set<(err: string) => void>();
-      subscribers.add(onDataUpdate);
-
-      const shared: SharedListener = {
-        unsub: () => {},
-        subscribers,
-        errorSubscribers,
-        data: cachedData || [],
-        loading: !cachedData,
-        error: null,
-      };
-
-      activeCollectionListeners[cacheKey] = shared;
-
-      const unsubFirestore = onSnapshot(
-        q,
-        (snap) => {
-          const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];
-          setCachedCollection(cacheKey, docs);
-          shared.data = docs;
-          shared.loading = false;
-          shared.error = null;
-          shared.subscribers.forEach((sub) => sub(docs));
-        },
-        (err) => {
-          shared.loading = false;
-          shared.error = err.message;
-          shared.errorSubscribers.forEach((sub) => sub(err.message));
-        }
-      );
-
-      shared.unsub = unsubFirestore;
-    } else {
-      listener.subscribers.add(onDataUpdate);
-      listener.errorSubscribers.add(onErrorUpdate);
-
-      onDataUpdate(listener.data);
-      if (listener.error) {
-        onErrorUpdate(listener.error);
-      }
-    }
-
-    return () => {
-      const activeListener = activeCollectionListeners[cacheKey];
-      if (activeListener) {
-        activeListener.subscribers.delete(onDataUpdate);
-        activeListener.errorSubscribers.delete(onErrorUpdate);
-      }
-    };
-  }, [collectionName, constraintsKey, cacheKey]);
-
-  return { data, loading, error };
+  return { data, loading, error, refresh: () => fetchData(true) };
 }
 
 export function useDocument<T>(collectionName: string, docId: string | null) {
-  const cacheKey = docId ? `${collectionName}:${docId}` : null;
+  const { user } = useAuth();
+  const userId = user?.uid || "";
+  const cacheKey = docId ? `${collectionName}:${docId}:${userId}` : null;
 
   // Initialize state to empty/loading for SSR hydration compatibility
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchDoc = useCallback(async (showLoading = true) => {
+    if (!docId || !cacheKey) {
+      setLoading(false);
+      return;
+    }
+    if (showLoading) setLoading(true);
+    try {
+      const snap = await getDoc(doc(db, collectionName, docId));
+      const docData = snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null;
+      
+      setCachedDocument(cacheKey, docData);
+      setData(docData);
+      setError(null);
+    } catch (err: any) {
+      console.error(`Error loading document ${collectionName}/${docId}:`, err);
+      setError(err.message || "Failed to load document");
+    } finally {
+      setLoading(false);
+    }
+  }, [collectionName, docId, cacheKey]);
 
   useEffect(() => {
     if (!docId || !cacheKey) {
@@ -271,77 +251,14 @@ export function useDocument<T>(collectionName: string, docId: string | null) {
     if (cachedData) {
       setData(cachedData);
       setLoading(false);
+      // Trigger background update (AJAX sync)
+      fetchDoc(false);
     } else {
-      setLoading(true);
+      fetchDoc(true);
     }
+  }, [docId, cacheKey, fetchDoc]);
 
-    let listener = activeDocumentListeners[cacheKey];
-
-    const onDataUpdate = (newData: T | null) => {
-      setData(newData);
-      setLoading(false);
-      setError(null);
-    };
-
-    const onErrorUpdate = (newError: string) => {
-      setError(newError);
-      setLoading(false);
-    };
-
-    if (!listener) {
-      const subscribers = new Set<(data: T | null) => void>();
-      const errorSubscribers = new Set<(err: string) => void>();
-      subscribers.add(onDataUpdate);
-
-      const shared: SharedListener = {
-        unsub: () => {},
-        subscribers,
-        errorSubscribers,
-        data: cachedData || null,
-        loading: !cachedData,
-        error: null,
-      };
-
-      activeDocumentListeners[cacheKey] = shared;
-
-      const unsubFirestore = onSnapshot(
-        doc(db, collectionName, docId),
-        (snap) => {
-          const docData = snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null;
-          setCachedDocument(cacheKey, docData);
-          shared.data = docData;
-          shared.loading = false;
-          shared.error = null;
-          shared.subscribers.forEach((sub) => sub(docData));
-        },
-        (err) => {
-          shared.loading = false;
-          shared.error = err.message;
-          shared.errorSubscribers.forEach((sub) => sub(err.message));
-        }
-      );
-
-      shared.unsub = unsubFirestore;
-    } else {
-      listener.subscribers.add(onDataUpdate);
-      listener.errorSubscribers.add(onErrorUpdate);
-
-      onDataUpdate(listener.data);
-      if (listener.error) {
-        onErrorUpdate(listener.error);
-      }
-    }
-
-    return () => {
-      const activeListener = activeDocumentListeners[cacheKey];
-      if (activeListener) {
-        activeListener.subscribers.delete(onDataUpdate);
-        activeListener.errorSubscribers.delete(onErrorUpdate);
-      }
-    };
-  }, [collectionName, docId, cacheKey]);
-
-  return { data, loading, error };
+  return { data, loading, error, refresh: () => fetchDoc(true) };
 }
 
 export function useFirestore(collectionName: string) {
@@ -406,17 +323,19 @@ export function useDashboardStats() {
   const { data: responses, loading: lr } = useCollection<any>("responses");
   const { data: meetings, loading: lm } = useCollection<any>("meetings");
   const { data: users, loading: lu } = useCollection<any>("users");
-  const { data: pipeline, loading: lpi } = useCollection<any>("pipeline");
+  const { data: leads, loading: lpi } = useCollection<any>("leads");
   const { data: tasks, loading: lt } = useCollection<any>("tasks");
 
   const stats = useMemo(() => {
     const activeProjects = projects.filter((p) => p.status === "in_progress").length;
     const completedProjects = projects.filter((p) => p.status === "completed").length;
     const pendingResponses = responses.filter((r) => r.status === "new").length;
+    const totalResponses = responses.length;
+    const repliedResponses = responses.filter((r) => r.status === "replied").length;
     const upcomingMeetings = meetings.filter((m) => m.status === "scheduled").length;
     const tasksCompleted = tasks.filter((t) => t.status === "done").length;
     const tasksPending = tasks.filter((t) => t.status !== "done").length;
-    const newLeads = pipeline.filter((d) => d.stage === "new").length;
+    const newLeads = leads.filter((d) => d.stage === "new").length;
     const totalRevenue = clients.reduce((sum, d) => sum + (d.totalValue || 0), 0);
 
     return {
@@ -425,15 +344,17 @@ export function useDashboardStats() {
       completedProjects,
       totalClients: clients.length,
       pendingResponses,
+      totalResponses,
+      repliedResponses,
       upcomingMeetings,
       teamMembers: users.length,
-      pipelineLeads: pipeline.length,
+      pipelineLeads: leads.length,
       tasksCompleted,
       tasksPending,
       newLeads,
       totalRevenue,
     };
-  }, [projects, clients, responses, meetings, users, pipeline, tasks]);
+  }, [projects, clients, responses, meetings, users, leads, tasks]);
 
   const loading = lp || lc || lr || lm || lu || lpi || lt;
 

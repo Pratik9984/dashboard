@@ -3,6 +3,8 @@ import React, { useState } from "react";
 import { Plus, Check, Trash2, Smile, Meh, Frown, Heart, ChevronDown, ChevronRight } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
 import { AuditEntry, AuditItem } from "@/app/types";
+import { useAuth } from "@/app/lib/AuthContext";
+import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
 import LoadingSpinner from "@/app/components/LoadingSpinner";
 import EmptyState from "@/app/components/EmptyState";
@@ -11,6 +13,7 @@ import toast from "react-hot-toast";
 export default function AuditPage() {
   const { data: audits, loading } = useCollection<AuditEntry>("audits");
   const { add, remove } = useFirestore("audits");
+  const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -32,14 +35,23 @@ export default function AuditPage() {
 
   const handleSave = async () => {
     try {
+      if (!canPerformAction(currentUserProfile?.role, "audits", "create")) {
+        toast.error("Unauthorized action");
+        return;
+      }
       const completed = form.items.filter((i) => i.completed).length;
-      await add({ ...form, date: new Date().toISOString().slice(0, 10), completionRate: form.items.length > 0 ? Math.round((completed / form.items.length) * 100) : 0, createdBy: "admin" });
+      await add({ ...form, date: new Date().toISOString().slice(0, 10), completionRate: form.items.length > 0 ? Math.round((completed / form.items.length) * 100) : 0, createdBy: currentUserProfile?.id || "admin" });
       toast.success("Audit saved"); setShowModal(false);
       setForm({ summary: "", mood: "good", items: [{ id: "1", category: "Development", description: "", completed: false, notes: "", time: "" }] });
     } catch { toast.error("Failed to save"); }
   };
 
   const handleDelete = async (id: string) => {
+    const audit = audits.find((a) => a.id === id);
+    if (!audit || !canPerformAction(currentUserProfile?.role, "audits", "delete", audit)) {
+      toast.error("Unauthorized action");
+      return;
+    }
     if (!confirm("Delete this audit?")) return;
     try { await remove(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
@@ -56,18 +68,23 @@ export default function AuditPage() {
 
   if (loading) return <LoadingSpinner size="lg" message="Loading audits..." />;
 
+  const visibleAudits = audits.filter(a => canPerformAction(currentUserProfile?.role, "audits", "read", a, currentUserProfile?.id));
+  const canAdd = canPerformAction(currentUserProfile?.role, "audits", "create");
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{audits.length} audit entries</p>
-        <button onClick={() => setShowModal(true)} className="btn-primary"><Plus className="w-4 h-4" /> New Audit</button>
+        <p className="text-sm text-slate-500">{visibleAudits.length} audit entries</p>
+        {canAdd && (
+          <button onClick={() => setShowModal(true)} className="btn-primary"><Plus className="w-4 h-4" /> New Audit</button>
+        )}
       </div>
 
-      {audits.length === 0 ? (
-        <EmptyState title="No audit entries" message="Start your daily audit to track work and progress." action={<button onClick={() => setShowModal(true)} className="btn-primary"><Plus className="w-4 h-4" /> Create Audit</button>} />
+      {visibleAudits.length === 0 ? (
+        <EmptyState title="No audit entries" message="Start your daily audit to track work and progress." action={canAdd ? <button onClick={() => setShowModal(true)} className="btn-primary"><Plus className="w-4 h-4" /> Create Audit</button> : undefined} />
       ) : (
         <div className="space-y-3">
-          {audits.sort((a, b) => b.date.localeCompare(a.date)).map((audit) => (
+          {visibleAudits.sort((a, b) => b.date.localeCompare(a.date)).map((audit) => (
             <div key={audit.id} className="card overflow-hidden">
               <div className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => setExpanded(expanded === audit.id ? null : audit.id)}>
                 {expanded === audit.id ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
@@ -86,7 +103,9 @@ export default function AuditPage() {
                     <span className="text-xs font-medium text-slate-600">{audit.completionRate}%</span>
                   </div>
                   <span className="text-xs text-slate-400">{audit.items.length} items</span>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(audit.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  {canPerformAction(currentUserProfile?.role, "audits", "delete", audit) && (
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(audit.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  )}
                 </div>
               </div>
               {expanded === audit.id && (
