@@ -18,7 +18,16 @@ export default function TeamPage() {
   const { profile: currentUserProfile } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", role: "member" as UserRole, department: "", position: "", phone: "", bio: "", skills: "" });
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    role: UserRole;
+    department: string;
+    position: string;
+    phone: string;
+    bio: string;
+    skills: string;
+  }>({ name: "", email: "", role: "member", department: "", position: "", phone: "", bio: "", skills: "" });
 
   const openAdd = () => { setEditing(null); setForm({ name: "", email: "", role: "member", department: "", position: "", phone: "", bio: "", skills: "" }); setShowModal(true); };
   const openEdit = (m: TeamMember) => { setEditing(m); setForm({ name: m.name, email: m.email, role: m.role, department: m.department, position: m.position, phone: m.phone || "", bio: m.bio || "", skills: m.skills.join(", ") }); setShowModal(true); };
