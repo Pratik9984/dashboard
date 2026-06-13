@@ -1,4 +1,4 @@
-import { db } from "@/app/lib/firebase";
+import { getDb } from "@/app/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 const corsHeaders = {
@@ -15,6 +15,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req) {
+  const db = getDb();
   try {
     const { visitorId, sessionId, pathname, isConversion } = await req.json();
 

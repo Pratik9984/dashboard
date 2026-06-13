@@ -7,7 +7,7 @@ import Modal from "@/app/components/Modal";
 import LoadingSpinner from "@/app/components/LoadingSpinner";
 import EmptyState from "@/app/components/EmptyState";
 import toast from "react-hot-toast";
-import { db } from "@/app/lib/firebase";
+import { getDb } from "@/app/lib/firebase";
 import { writeBatch, doc as firestoreDoc, collection, Timestamp } from "firebase/firestore";
 
 // Helper function to map dynamic sheet columns to database collection properties
@@ -136,6 +136,7 @@ function mapRowToSchema(row: Record<string, any>, type: string) {
 }
 
 export default function SheetsPage() {
+  const db = getDb();
   const { data: sheets, loading } = useCollection<SheetData>("sheets");
   const { add, update, remove } = useFirestore("sheets");
 

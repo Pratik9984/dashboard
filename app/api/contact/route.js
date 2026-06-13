@@ -1,4 +1,4 @@
-import { db } from '@/app/lib/firebase';
+import { getDb } from '@/app/lib/firebase';
 import { collection, addDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { Resend } from 'resend';
 
@@ -18,6 +18,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req) {
+  const db = getDb();
   try {
     const { name, email, phone, message } = await req.json();
 

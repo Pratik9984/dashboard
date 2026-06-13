@@ -1,9 +1,10 @@
-import { db } from '@/app/lib/firebase';
+import { getDb } from '@/app/lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, Timestamp, where } from 'firebase/firestore';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 
 export async function POST(req) {
+  const db = getDb();
   let sender = "";
   let subject = "";
   let body = "";
@@ -29,7 +30,8 @@ export async function POST(req) {
 
       // Extract files from formData and upload to storage
       const { ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
-      const { storage } = await import('@/app/lib/firebase');
+      const { getFirebaseStorage } = await import('@/app/lib/firebase');
+      const storage = getFirebaseStorage();
 
       for (const [key, value] of data.entries()) {
         if (value && typeof value === 'object' && typeof value.arrayBuffer === 'function') {
@@ -67,7 +69,8 @@ export async function POST(req) {
 
       if (data.attachments && Array.isArray(data.attachments)) {
         const { ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
-        const { storage } = await import('@/app/lib/firebase');
+        const { getFirebaseStorage } = await import('@/app/lib/firebase');
+        const storage = getFirebaseStorage();
 
         for (const att of data.attachments) {
           if (att.content && att.filename) {
@@ -154,6 +157,7 @@ export async function POST(req) {
 }
 
 export async function GET() {
+  const db = getDb();
   const username = process.env.GMAIL_USER;
   const password = process.env.GMAIL_APP_PASSWORD ? process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, '') : '';
 
@@ -217,7 +221,8 @@ export async function GET() {
               const uploadedAttachments = [];
               if (parsed.attachments && parsed.attachments.length > 0) {
                 const { ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
-                const { storage } = await import('@/app/lib/firebase');
+                const { getFirebaseStorage } = await import('@/app/lib/firebase');
+                const storage = getFirebaseStorage();
 
                 for (const att of parsed.attachments) {
                   try {

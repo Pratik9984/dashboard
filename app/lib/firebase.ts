@@ -1,12 +1,12 @@
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getAuth, Auth } from "firebase/auth";
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, addDoc, setDoc,
   getDoc, getDocs, updateDoc, deleteDoc, query, where,
-  orderBy, limit, Timestamp, onSnapshot,
+  orderBy, limit, Timestamp, onSnapshot, Firestore,
 } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,20 +17,33 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export function getFirebaseApp(): FirebaseApp {
+  return getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+}
 
-export const auth = getAuth(app);
+export function getFirebaseAuth(): Auth {
+  return getAuth(getFirebaseApp());
+}
 
 // Safe initialization of Firestore persistent cache for client and server environments
-export const db = typeof window !== "undefined"
-  ? initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
-    })
-  : getFirestore(app);
+let dbInstance: Firestore | null = null;
+export function getDb(): Firestore {
+  if (!dbInstance) {
+    const appInstance = getFirebaseApp();
+    dbInstance = typeof window !== "undefined"
+      ? initializeFirestore(appInstance, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        })
+      : getFirestore(appInstance);
+  }
+  return dbInstance;
+}
 
-export const storage = getStorage(app);
+export function getFirebaseStorage(): FirebaseStorage {
+  return getStorage(getFirebaseApp());
+}
 
 export {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
@@ -38,6 +51,5 @@ export {
   Timestamp, onSnapshot,
 };
 
-export default app;
 
 

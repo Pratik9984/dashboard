@@ -4,7 +4,7 @@ import {
   User, signInWithEmailAndPassword, signOut, onAuthStateChanged,
   createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile,
 } from "firebase/auth";
-import { auth, db, doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs, deleteDoc } from "./firebase";
+import { getFirebaseAuth, getDb, doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs, deleteDoc } from "./firebase";
 import { TeamMember, UserRole } from "@/app/types";
 
 interface AuthContextType {
@@ -26,6 +26,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const auth = getFirebaseAuth();
+  const db = getDb();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<TeamMember | null>(null);
   const [loading, setLoading] = useState(true);

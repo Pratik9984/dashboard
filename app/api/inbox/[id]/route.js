@@ -1,7 +1,8 @@
-import { db } from '@/lib/firebase';
+import { getDb } from '@/lib/firebase';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 
 export async function GET(req, { params }) {
+  const db = getDb();
   try {
     const docRef = doc(db, 'emails', params.id);
     const docSnap = await getDoc(docRef);
@@ -16,6 +17,7 @@ export async function GET(req, { params }) {
 }
 
 export async function PATCH(req, { params }) {
+  const db = getDb();
   const updates = await req.json(); // { read: true } or { starred: true }
   await updateDoc(doc(db, 'emails', params.id), updates);
   return Response.json({ ok: true });

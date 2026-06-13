@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { getDb } from '@/lib/firebase';
 import { collection, addDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 
 const corsHeaders = {
@@ -15,6 +15,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req) {
+  const db = getDb();
   try {
     let body = {};
     const contentType = req.headers.get("content-type") || "";

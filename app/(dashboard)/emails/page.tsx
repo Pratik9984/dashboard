@@ -88,7 +88,8 @@ export default function EmailsPage() {
     
     try {
       const { ref: storageRef, uploadBytes, getDownloadURL } = await import("firebase/storage");
-      const { storage } = await import("@/app/lib/firebase");
+      const { getFirebaseStorage } = await import("@/app/lib/firebase");
+      const storage = getFirebaseStorage();
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i];

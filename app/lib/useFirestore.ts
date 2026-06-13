@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  db, collection, doc, addDoc, setDoc, getDoc, getDocs,
+  getDb, getFirebaseAuth, collection, doc, addDoc, setDoc, getDoc, getDocs,
   updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot, Timestamp,
-  auth,
 } from "./firebase";
 import { QueryConstraint } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -88,7 +87,7 @@ const activeDocumentListeners: Record<string, SharedListener> = {};
 
 // Clean up listeners and localStorage cache on logout
 if (typeof window !== "undefined") {
-  onAuthStateChanged(auth, (user) => {
+  onAuthStateChanged(getFirebaseAuth(), (user) => {
     if (!user) {
       Object.keys(activeCollectionListeners).forEach((key) => {
         try {
@@ -177,7 +176,7 @@ export function useCollection<T extends { id: string }>(
   const fetchData = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const ref = collection(db, collectionName);
+      const ref = collection(getDb(), collectionName);
       // Directly spread the original QueryConstraint objects to prevent corruption
       const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
       const snap = await getDocs(q);
@@ -227,7 +226,7 @@ export function useDocument<T>(collectionName: string, docId: string | null) {
     }
     if (showLoading) setLoading(true);
     try {
-      const snap = await getDoc(doc(db, collectionName, docId));
+      const snap = await getDoc(doc(getDb(), collectionName, docId));
       const docData = snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null;
       
       setCachedDocument(cacheKey, docData);
@@ -264,7 +263,7 @@ export function useDocument<T>(collectionName: string, docId: string | null) {
 export function useFirestore(collectionName: string) {
   const add = useCallback(
     async <T extends object>(data: T) => {
-      const ref = await addDoc(collection(db, collectionName), {
+      const ref = await addDoc(collection(getDb(), collectionName), {
         ...data,
         createdAt: Timestamp.now(),
       });
@@ -275,7 +274,7 @@ export function useFirestore(collectionName: string) {
 
   const set = useCallback(
     async <T extends object>(id: string, data: T) =>
-      setDoc(doc(db, collectionName, id), {
+      setDoc(doc(getDb(), collectionName, id), {
         ...data,
         updatedAt: Timestamp.now(),
       }),
@@ -284,7 +283,7 @@ export function useFirestore(collectionName: string) {
 
   const update = useCallback(
     async <T extends object>(id: string, data: Partial<T>) =>
-      updateDoc(doc(db, collectionName, id), {
+      updateDoc(doc(getDb(), collectionName, id), {
         ...data,
         updatedAt: Timestamp.now(),
       }),
@@ -292,13 +291,13 @@ export function useFirestore(collectionName: string) {
   );
 
   const remove = useCallback(
-    async (id: string) => deleteDoc(doc(db, collectionName, id)),
+    async (id: string) => deleteDoc(doc(getDb(), collectionName, id)),
     [collectionName]
   );
 
   const get = useCallback(
     async <T>(id: string) => {
-      const snap = await getDoc(doc(db, collectionName, id));
+      const snap = await getDoc(doc(getDb(), collectionName, id));
       return snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null;
     },
     [collectionName]
@@ -306,7 +305,7 @@ export function useFirestore(collectionName: string) {
 
   const getAll = useCallback(
     async <T>(constraints: QueryConstraint[] = []) => {
-      const ref = collection(db, collectionName);
+      const ref = collection(getDb(), collectionName);
       const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];

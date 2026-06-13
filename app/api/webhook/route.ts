@@ -1,9 +1,12 @@
 import { NextRequest } from "next/server";
-import { db, storage } from "@/app/lib/firebase";
+import { getDb, getFirebaseStorage } from "@/app/lib/firebase";
+
 import { collection, addDoc, Timestamp, query, where, getDocs } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export const POST = async (req: NextRequest) => {
+  const db = getDb();
+  const storage = getFirebaseStorage();
   try {
     const event = await req.json();
 
