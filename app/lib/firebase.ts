@@ -27,17 +27,30 @@ export function getFirebaseAuth(): Auth {
 
 // Safe initialization of Firestore persistent cache for client and server environments
 let dbInstance: Firestore | null = null;
+
 export function getDb(): Firestore {
-  if (!dbInstance) {
-    const appInstance = getFirebaseApp();
-    dbInstance = typeof window !== "undefined"
-      ? initializeFirestore(appInstance, {
-          localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager(),
-          }),
-        })
-      : getFirestore(appInstance);
+  if (dbInstance) return dbInstance;
+
+  const appInstance = getFirebaseApp();
+
+  // On server: just use getFirestore (no persistence needed)
+  if (typeof window === "undefined") {
+    dbInstance = getFirestore(appInstance);
+    return dbInstance;
   }
+
+  // On client: try persistent cache, fall back if already initialized
+  try {
+    dbInstance = initializeFirestore(appInstance, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch {
+    // Already initialized — just get the existing instance
+    dbInstance = getFirestore(appInstance);
+  }
+
   return dbInstance;
 }
 
