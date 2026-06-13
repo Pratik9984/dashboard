@@ -6,6 +6,7 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["imapflow", "mailparser"],
     optimizePackageImports: ["lucide-react", "recharts", "googleapis", "date-fns"],
+    serverComponentsHmrCache: true,
   },
 };
 
