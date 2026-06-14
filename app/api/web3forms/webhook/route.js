@@ -82,17 +82,19 @@ export async function POST(req) {
     try {
       let isDuplicate = false;
       if (submitterEmail && formId) {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         const q = query(
           collection(db, 'web3forms'),
           where('submitterEmail', '==', submitterEmail),
-          where('formId', '==', formId),
-          where('submittedAt', '>=', Timestamp.fromDate(fiveMinutesAgo))
+          where('formId', '==', formId)
         );
         const querySnapshot = await getDocs(q);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         isDuplicate = querySnapshot.docs.some(doc => {
           const docData = doc.data();
-          return JSON.stringify(docData.data) === JSON.stringify(data);
+          const submittedAt = docData.submittedAt && typeof docData.submittedAt.toDate === 'function' 
+            ? docData.submittedAt.toDate() 
+            : (docData.submittedAt instanceof Date ? docData.submittedAt : null);
+          return submittedAt && submittedAt >= fiveMinutesAgo && JSON.stringify(docData.data) === JSON.stringify(data);
         });
       }
 

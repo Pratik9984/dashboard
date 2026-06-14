@@ -53,17 +53,23 @@ export const POST = async (req: NextRequest) => {
         }
       }
 
-      // Deduplication check: check if an email with the same from and subject was received in the last 5 minutes
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      // Deduplication check: check if an email with the same from and subject was received, then filter in-memory to avoid index requirements
       const q = query(
         collection(db, "emails"),
         where("from", "==", from),
-        where("subject", "==", subject),
-        where("createdAt", ">=", Timestamp.fromDate(fiveMinutesAgo))
+        where("subject", "==", subject)
       );
       const querySnapshot = await getDocs(q);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const hasDuplicate = querySnapshot.docs.some(doc => {
+        const docData = doc.data();
+        const createdAt = docData.createdAt && typeof docData.createdAt.toDate === 'function' 
+          ? docData.createdAt.toDate() 
+          : (docData.createdAt instanceof Date ? docData.createdAt : null);
+        return createdAt && createdAt >= fiveMinutesAgo;
+      });
 
-      if (querySnapshot.empty) {
+      if (!hasDuplicate) {
         // Add to Firestore emails collection
         await addDoc(collection(db, "emails"), {
           from,

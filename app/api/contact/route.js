@@ -29,19 +29,21 @@ export async function POST(req) {
       });
     }
 
-    // Deduplication check: look for submissions with same email, form ID, and message in last 5 minutes
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    // Deduplication check: look for submissions with same email and form ID, then filter by time in-memory to avoid index requirements
     const q = query(
       collection(db, 'web3forms'),
       where('submitterEmail', '==', email),
-      where('formId', '==', 'stackandscale_contact'),
-      where('submittedAt', '>=', Timestamp.fromDate(fiveMinutesAgo))
+      where('formId', '==', 'stackandscale_contact')
     );
     
     const querySnapshot = await getDocs(q);
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const duplicateDoc = querySnapshot.docs.find(doc => {
       const docData = doc.data();
-      return docData.data?.message === message;
+      const submittedAt = docData.submittedAt && typeof docData.submittedAt.toDate === 'function' 
+        ? docData.submittedAt.toDate() 
+        : (docData.submittedAt instanceof Date ? docData.submittedAt : null);
+      return submittedAt && submittedAt >= fiveMinutesAgo && docData.data?.message === message;
     });
 
     if (duplicateDoc) {
