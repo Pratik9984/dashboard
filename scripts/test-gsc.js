@@ -44,8 +44,30 @@ async function testGsc() {
     return;
   }
 
-  // Translate escaped newline characters
-  privateKey = privateKey.replace(/\\n/g, '\n');
+  function normalizePrivateKey(key) {
+    if (!key) return '';
+    let cleaned = key.replace(/^["']|["'],?$/g, '').trim();
+    cleaned = cleaned.replace(/\\n/g, '\n');
+    
+    const header = '-----BEGIN PRIVATE KEY-----';
+    const footer = '-----END PRIVATE KEY-----';
+    
+    if (cleaned.includes(header) && cleaned.includes(footer)) {
+      const base64Part = cleaned
+        .replace(header, '')
+        .replace(footer, '')
+        .replace(/\s+/g, '');
+      
+      const lines = [];
+      for (let i = 0; i < base64Part.length; i += 64) {
+        lines.push(base64Part.substring(i, i + 64));
+      }
+      return `${header}\n${lines.join('\n')}\n${footer}\n`;
+    }
+    return cleaned;
+  }
+
+  privateKey = normalizePrivateKey(privateKey);
 
   // Extract project ID
   let projectId;

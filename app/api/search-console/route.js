@@ -1,12 +1,44 @@
 import { google } from 'googleapis';
 import { requireAdmin } from '@/app/lib/firebaseAdmin';
 
+export const dynamic = 'force-dynamic';
+
+function normalizePrivateKey(key) {
+  if (!key) return '';
+  // Remove wrapping quotes and trailing comma if they exist
+  let cleaned = key.replace(/^["']|["'],?$/g, '').trim();
+  // Translate escaped newline characters
+  cleaned = cleaned.replace(/\\n/g, '\n');
+  
+  const header = '-----BEGIN PRIVATE KEY-----';
+  const footer = '-----END PRIVATE KEY-----';
+  
+  if (cleaned.includes(header) && cleaned.includes(footer)) {
+    // Reconstruct PEM block to be clean and standard
+    const base64Part = cleaned
+      .replace(header, '')
+      .replace(footer, '')
+      .replace(/\s+/g, ''); // Remove all whitespace/newlines
+    
+    // Chunk base64 string to 64 character lines
+    const lines = [];
+    for (let i = 0; i < base64Part.length; i += 64) {
+      lines.push(base64Part.substring(i, i + 64));
+    }
+    return `${header}\n${lines.join('\n')}\n${footer}\n`;
+  }
+  return cleaned;
+}
+
 export async function GET(request) {
   try {
     // Temporarily bypassing Firebase Admin authentication for local testing
     // await requireAdmin(request);
   } catch (err) {
-    return Response.json({ error: `Firebase Admin Error: ${err.message}` }, { status: 401 });
+    return new Response(
+      JSON.stringify({ error: `Firebase Admin Error: ${err.message}` }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -19,21 +51,19 @@ export async function GET(request) {
 
     // Remove wrapping double quotes and trailing commas if they exist
     if (clientEmail) {
-      clientEmail = clientEmail.replace(/^["']|["'],?$/g, '');
+      clientEmail = clientEmail.replace(/^["']|["'],?$/g, '').trim();
     }
     if (privateKey) {
-      privateKey = privateKey.replace(/^["']|["'],?$/g, '');
-      // Translate escaped newline characters
-      privateKey = privateKey.replace(/\\n/g, '\n');
+      privateKey = normalizePrivateKey(privateKey);
     }
     if (siteUrl) {
-      siteUrl = siteUrl.replace(/^["']|["'],?$/g, '');
+      siteUrl = siteUrl.replace(/^["']|["'],?$/g, '').trim();
     }
 
     if (!clientEmail || !privateKey || !siteUrl) {
-      return Response.json(
-        { error: 'Google Search Console environment variables are missing.' },
-        { status: 500 }
+      return new Response(
+        JSON.stringify({ error: 'Google Search Console environment variables are missing.' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -97,15 +127,18 @@ export async function GET(request) {
       },
     });
 
-    return Response.json({
-      traffic: trafficResponse.data.rows || [],
-      queries: queriesResponse.data.rows || [],
-    });
+    return new Response(
+      JSON.stringify({
+        traffic: trafficResponse.data.rows || [],
+        queries: queriesResponse.data.rows || [],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('GSC Fetch Error:', error);
-    return Response.json(
-      { error: `GSC Error: ${error.message || 'Failed to fetch Search Console data'}` },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({ error: `GSC Error: ${error.message || 'Failed to fetch Search Console data'}` }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
