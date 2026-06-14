@@ -1,5 +1,4 @@
 import { google } from 'googleapis';
-import { requireAdmin } from '@/app/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,16 +30,6 @@ function normalizePrivateKey(key) {
 }
 
 export async function GET(request) {
-  try {
-    // Temporarily bypassing Firebase Admin authentication for local testing
-    // await requireAdmin(request);
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: `Firebase Admin Error: ${err.message}` }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
-    );
-  }
-
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '30', 10);
