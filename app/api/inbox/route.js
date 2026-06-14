@@ -10,7 +10,7 @@ export async function POST(req) {
   let subject = "";
   let body = "";
   let html = "";
-  let to = ["hello@stackandscale.in"];
+  let to = [process.env.GMAIL_USER || ''];
   let cc = [];
   let attachments = [];
 

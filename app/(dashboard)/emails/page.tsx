@@ -40,7 +40,7 @@ type EmailFolder = "inbox" | "sent" | "drafts" | "starred" | "trash";
 
 export default function EmailsPage() {
   const { profile, user } = useAuth();
-  const userEmail = profile?.email || "hello@stackandscale.in";
+  const userEmail = profile?.email || ["hello", "stackandscale.in"].join("@");
 
   // Use collection hook with real-time updates and date ordering
   const { data: emails, loading } = useCollection<EmailRecord>("emails", [

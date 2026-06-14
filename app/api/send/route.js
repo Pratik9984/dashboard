@@ -40,7 +40,7 @@ export async function POST(req) {
   }
 
   const { error } = await resend.emails.send({
-    from: 'hello@stackandscale.in',
+    from: process.env.GMAIL_USER,
     to,
     subject,
     html: html || body || '(No content)',

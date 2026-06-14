@@ -48,7 +48,7 @@ export async function POST(req) {
       mocked = true;
     } else {
       const sendParams = {
-        from: 'hello@stackandscale.in',
+        from: process.env.GMAIL_USER,
         to: recipientList,
         subject: subject,
         html: html || body || '(No content)',
@@ -70,7 +70,7 @@ export async function POST(req) {
 
     // Save successfully sent/mocked email to Firestore
     const savedDoc = await addDoc(collection(db, 'emails'), {
-      from: 'hello@stackandscale.in',
+      from: process.env.GMAIL_USER,
       to: recipientList,
       cc: ccList,
       subject: subject || '(No subject)',

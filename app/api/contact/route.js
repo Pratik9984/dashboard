@@ -77,8 +77,8 @@ export async function POST(req) {
     if (resend) {
       try {
         const { error } = await resend.emails.send({
-          from: 'hello@stackandscale.in',
-          to: 'hello@stackandscale.in',
+          from: process.env.GMAIL_USER,
+          to: process.env.GMAIL_USER,
           subject: `New Lead: Project Scope Filed by ${name}`,
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
