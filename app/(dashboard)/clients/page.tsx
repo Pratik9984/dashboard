@@ -53,7 +53,7 @@ export default function ClientsPage() {
     try { await remove(id); toast.success("Client deleted"); } catch { toast.error("Failed to delete"); }
   };
 
-  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const isMemberOrViewer = currentUserProfile?.role === "member";
   const userClients = useMemo(() => {
     if (!isMemberOrViewer) return clients;
     

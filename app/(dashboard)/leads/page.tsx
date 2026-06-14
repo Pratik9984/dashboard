@@ -1,8 +1,8 @@
 "use client";
 import React, { useState, useMemo } from "react";
-import { Plus, Edit2, Trash2, ArrowRight, DollarSign, PhoneCall } from "lucide-react";
+import { Plus, Edit2, Trash2, ArrowRight, DollarSign } from "lucide-react";
 import { useCollection, useFirestore } from "@/app/lib/useFirestore";
-import { Lead, CallLog, TeamMember } from "@/app/types";
+import { Lead, TeamMember } from "@/app/types";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canPerformAction } from "@/app/lib/permissions";
 import Modal from "@/app/components/Modal";
@@ -16,24 +16,23 @@ import {
 } from "recharts";
 import toast from "react-hot-toast";
 import { Timestamp, writeBatch, doc as firestoreDoc, collection, query, where, getDocs, addDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/app/lib/firebase";
+import { getDb } from "@/app/lib/firebase";
 
 export default function LeadsPage() {
+  const db = getDb();
   const { data: leads, loading, refresh } = useCollection<Lead>("leads");
   const { data: users } = useCollection<TeamMember>("users");
   const { data: sheets } = useCollection<any>("sheets");
   const { add, update, remove } = useFirestore("leads");
-  const { add: addCallLog } = useFirestore("calls");
   const { profile: currentUserProfile } = useAuth();
 
   const [showModal, setShowModal] = useState(false);
-  const [showCallModal, setShowCallModal] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [view, setView] = useState<"board" | "list" | "analysis">("board");
   const [selectedSheet, setSelectedSheet] = useState<string>("all");
 
   const isRestricted = useMemo(() => {
-    return currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+    return currentUserProfile?.role === "member";
   }, [currentUserProfile]);
 
   const myAssignedSheetIds = useMemo(() => {
@@ -44,6 +43,17 @@ export default function LeadsPage() {
         .map((s: any) => s.id)
     );
   }, [sheets, currentUserProfile]);
+
+  const getLeadAssignee = (lead: Lead) => {
+    if (lead.sheetId) {
+      const sheet = sheets.find((s: any) => s.id === lead.sheetId);
+      if (sheet && sheet.assignedTo) {
+        const user = users.find((u) => u.id === sheet.assignedTo);
+        if (user) return user.name;
+      }
+    }
+    return lead.assignedTo || "admin";
+  };
 
   const myLeads = useMemo(() => {
     if (!isRestricted) return leads;
@@ -171,53 +181,7 @@ export default function LeadsPage() {
   }, [leads, loading, refresh]);
   
   const [form, setForm] = useState({ name: "", company: "", email: "", phone: "", source: "", stage: "new" as Lead["stage"], value: "", notes: "", assignedTo: "admin", sheetId: "", sheetName: "" });
-  const [callForm, setCallForm] = useState({
-    type: "call" as CallLog["type"],
-    contactName: "",
-    contactEmail: "",
-    contactPhone: "",
-    direction: "outbound" as CallLog["direction"],
-    status: "answered" as CallLog["status"],
-    duration: "",
-    notes: "",
-    recordedBy: "admin"
-  });
-
   const openAdd = () => { setEditing(null); setForm({ name: "", company: "", email: "", phone: "", source: "", stage: "new", value: "", notes: "", assignedTo: "admin", sheetId: "", sheetName: "" }); setShowModal(true); };
-  
-  const openLogCall = (lead: Lead) => {
-    setCallForm({
-      type: "call",
-      contactName: lead.name,
-      contactEmail: lead.email || "",
-      contactPhone: lead.phone || "",
-      direction: "outbound",
-      status: "answered",
-      duration: "",
-      notes: "",
-      recordedBy: "admin"
-    });
-    setShowCallModal(true);
-  };
-
-  const handleSaveCallLog = async () => {
-    try {
-      if (!canPerformAction(currentUserProfile?.role, "calls", "create", undefined, currentUserProfile?.id)) {
-        toast.error("Unauthorized action");
-        return;
-      }
-      const data = {
-        ...callForm,
-        duration: callForm.duration ? parseInt(callForm.duration, 10) : undefined,
-        date: new Date()
-      };
-      await addCallLog(data);
-      toast.success("Call/Message logged successfully!");
-      setShowCallModal(false);
-    } catch {
-      toast.error("Failed to log call/message");
-    }
-  };
 
   const openEdit = (l: Lead) => { 
     setEditing(l); 
@@ -692,24 +656,20 @@ export default function LeadsPage() {
                               </span>
                             </div>
                           )}
-                          {lead.assignedTo && (
-                            <div className="mt-1.5 flex flex-wrap">
-                              <span className="text-[10px] font-medium bg-indigo-50 border border-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded truncate max-w-[180px]" title={`Assigned To: ${lead.assignedTo}`}>
-                                👤 {lead.assignedTo}
-                              </span>
-                            </div>
+                          {!isRestricted && (
+                            (() => {
+                              const resolvedAssignee = getLeadAssignee(lead);
+                              return resolvedAssignee ? (
+                                <div className="mt-1.5 flex flex-wrap">
+                                  <span className="text-[10px] font-medium bg-indigo-50 border border-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded truncate max-w-[180px]" title={`Assigned To: ${resolvedAssignee}`}>
+                                    👤 {resolvedAssignee}
+                                  </span>
+                                </div>
+                              ) : null;
+                            })()
                           )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          {canPerformAction(currentUserProfile?.role, "calls", "create") && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); openLogCall(lead); }}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
-                              title="Log Call/Message"
-                            >
-                              <PhoneCall className="w-3.5 h-3.5" />
-                            </button>
-                          )}
                           {canPerformAction(currentUserProfile?.role, "leads", "delete", lead) && (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }}
@@ -754,21 +714,17 @@ export default function LeadsPage() {
                   <p className="text-xs text-slate-400 mt-0.5">
                     {l.email} · {l.source}
                     {l.sheetName && <span className="text-indigo-500 font-medium"> · 📄 {l.sheetName}</span>}
-                    {l.assignedTo && <span className="text-indigo-600 font-medium"> · 👤 {l.assignedTo}</span>}
+                    {!isRestricted && (
+                      (() => {
+                        const resolvedAssignee = getLeadAssignee(l);
+                        return resolvedAssignee ? <span className="text-indigo-600 font-medium"> · 👤 {resolvedAssignee}</span> : null;
+                      })()
+                    )}
                   </p>
                 </div>
                 <StatusBadge status={l.stage} />
                 {l.value && <span className="text-sm font-semibold text-slate-700">{formatCurrency(l.value)}</span>}
                 <div className="flex items-center gap-1">
-                  {canPerformAction(currentUserProfile?.role, "calls", "create") && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openLogCall(l); }}
-                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors"
-                      title="Log Call/Message"
-                    >
-                      <PhoneCall className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                   {canPerformAction(currentUserProfile?.role, "leads", "delete", l) && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDelete(l.id); }}
@@ -801,16 +757,18 @@ export default function LeadsPage() {
             <div><label className="label">Stage</label><select className="input-field" value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value as Lead["stage"] })}>{LEAD_STAGES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}</select></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="label">Value (₹)</label><input className="input-field" type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></div>
-            <div>
-              <label className="label">Assigned To</label>
-              <select className="input-field" value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })} disabled={!!form.sheetId}>
-                <option value="admin">Admin (Default)</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.name}>{u.name} ({u.role})</option>
-                ))}
-              </select>
-            </div>
+            <div className={isRestricted ? "col-span-2" : ""}><label className="label">Value (₹)</label><input className="input-field" type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></div>
+            {!isRestricted && (
+              <div>
+                <label className="label">Assigned To</label>
+                <select className="input-field" value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })} disabled={!!form.sheetId}>
+                  <option value="admin">Admin (Default)</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.name}>{u.name} ({u.role})</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div>
             <label className="label">Associated Sheet</label>
@@ -857,48 +815,7 @@ export default function LeadsPage() {
         </div>
       </Modal>
 
-      {/* Quick Call Logging Modal */}
-      <Modal isOpen={showCallModal} onClose={() => setShowCallModal(false)} title="Log Call/Message for Lead"
-        footer={<><button onClick={() => setShowCallModal(false)} className="btn-secondary">Cancel</button><button onClick={handleSaveCallLog} className="btn-primary">Save Log</button></>}>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Type</label>
-              <select className="input-field" value={callForm.type} onChange={(e) => setCallForm({ ...callForm, type: e.target.value as CallLog["type"] })}>
-                <option value="call">Call</option>
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="telegram">Telegram</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Direction</label>
-              <select className="input-field" value={callForm.direction} onChange={(e) => setCallForm({ ...callForm, direction: e.target.value as CallLog["direction"] })}>
-                <option value="outbound">Outbound</option>
-                <option value="inbound">Inbound</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="label">Contact Name</label><input className="input-field" value={callForm.contactName} onChange={(e) => setCallForm({ ...callForm, contactName: e.target.value })} /></div>
-            <div><label className="label">Phone</label><input className="input-field" value={callForm.contactPhone} onChange={(e) => setCallForm({ ...callForm, contactPhone: e.target.value })} /></div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="label">Status</label>
-              <select className="input-field" value={callForm.status} onChange={(e) => setCallForm({ ...callForm, status: e.target.value as CallLog["status"] })}>
-                <option value="answered">Answered</option>
-                <option value="missed">Missed</option>
-                <option value="voicemail">Voicemail</option>
-                <option value="sent">Sent</option>
-              </select>
-            </div>
-            <div><label className="label">Duration (sec)</label><input className="input-field" type="number" value={callForm.duration} onChange={(e) => setCallForm({ ...callForm, duration: e.target.value })} /></div>
-            <div><label className="label">Recorded By</label><input className="input-field" value={callForm.recordedBy} onChange={(e) => setCallForm({ ...callForm, recordedBy: e.target.value })} /></div>
-          </div>
-          <div><label className="label">Notes</label><textarea className="input-field" rows={3} value={callForm.notes} onChange={(e) => setCallForm({ ...callForm, notes: e.target.value })} /></div>
-        </div>
-      </Modal>
+
     </div>
   );
 }

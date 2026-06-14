@@ -25,7 +25,7 @@ export default function TasksPage() {
 
   const openAdd = () => {
     setEditing(null);
-    const isRestricted = currentUserProfile?.role !== "admin" && currentUserProfile?.role !== "owner" && currentUserProfile?.role !== "manager";
+    const isRestricted = currentUserProfile?.role !== "admin";
     setForm({
       title: "",
       description: "",
@@ -112,7 +112,7 @@ export default function TasksPage() {
     try { await remove(id); toast.success("Task deleted"); } catch { toast.error("Failed to delete"); }
   };
 
-  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const isMemberOrViewer = currentUserProfile?.role === "member";
   const userTasks = isMemberOrViewer
     ? tasks.filter((t) => t.assignedTo === currentUserProfile?.id || t.assigneeName?.toLowerCase() === currentUserProfile?.name?.toLowerCase() || t.createdBy === currentUserProfile?.id)
     : tasks;
@@ -222,7 +222,7 @@ export default function TasksPage() {
                 <option value="">Unassigned</option>
                 {members
                   .filter((m) => {
-                    const isRestricted = currentUserProfile?.role !== "admin" && currentUserProfile?.role !== "owner" && currentUserProfile?.role !== "manager";
+                    const isRestricted = currentUserProfile?.role !== "admin";
                     if (isRestricted) {
                       return m.id === currentUserProfile?.id;
                     }

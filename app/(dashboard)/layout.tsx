@@ -14,7 +14,6 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/clients": { title: "Clients", subtitle: "Client relationship management" },
   "/leads": { title: "Leads", subtitle: "Track your leads and deals" },
   "/responses": { title: "Responses", subtitle: "Manage contact form responses" },
-  "/calls": { title: "Calls & Messages", subtitle: "Communication log" },
   "/meetings": { title: "Meetings", subtitle: "Schedule and track meetings" },
   "/audit": { title: "Daily Audit", subtitle: "Track your daily work" },
   "/analytics": { title: "Analytics", subtitle: "Revenue and growth metrics" },
@@ -24,29 +23,15 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/insights": { title: "Insights", subtitle: "Website analytics and traffic" },
 };
 
-import { useCollection } from "@/app/lib/useFirestore";
 import { canAccessPage } from "@/app/lib/permissions";
 import { ShieldAlert } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { user, profile, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-
-  // Pre-warm caches and hold active background query connections for all dashboard sections
-  useCollection("projects");
-  useCollection("clients");
-  useCollection("responses");
-  useCollection("meetings");
-  useCollection("users");
-  useCollection("leads");
-  useCollection("tasks");
-  useCollection("calls");
-  useCollection("emails");
-  useCollection("web3forms");
-  useCollection("audits");
-  useCollection("insights");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -67,9 +52,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-slate-50/50">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-      <div className={`transition-sidebar ${collapsed ? "ml-[72px]" : "ml-[260px]"}`}>
-        <Header title={isAuthorized ? pageInfo.title : "Access Denied"} subtitle={isAuthorized ? pageInfo.subtitle : ""} />
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={() => setCollapsed(!collapsed)}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
+      />
+      <div className={`transition-sidebar ml-0 ${collapsed ? "md:ml-[72px]" : "md:ml-[260px]"}`}>
+        <Header
+          title={isAuthorized ? pageInfo.title : "Access Denied"}
+          subtitle={isAuthorized ? pageInfo.subtitle : ""}
+          onToggleMobile={() => setMobileOpen(!mobileOpen)}
+        />
         <main className="p-6">
           {isAuthorized ? (
             children

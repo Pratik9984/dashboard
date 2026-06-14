@@ -1,6 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 
-export type UserRole = "owner" | "admin" | "manager" | "member" | "viewer";
+export type UserRole = "admin" | "member";
 
 export interface TeamMember {
   id: string;
@@ -16,6 +16,12 @@ export interface TeamMember {
   joinedAt: Timestamp | Date;
   isActive: boolean;
   lastSeen?: Timestamp | Date;
+  preferences?: {
+    theme?: string;
+    notifyResponses?: boolean;
+    notifySheets?: boolean;
+    notifyTasks?: boolean;
+  };
 }
 
 export interface Project {
@@ -100,21 +106,6 @@ export interface Response {
   assignedTo?: string;
   formId?: string;
   createdAt: Timestamp | Date;
-}
-
-export interface CallLog {
-  id: string;
-  type: "call" | "sms" | "whatsapp" | "telegram";
-  contactName: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  direction: "inbound" | "outbound";
-  status: "answered" | "missed" | "voicemail" | "sent";
-  duration?: number;
-  notes?: string;
-  recordedBy: string;
-  date: Timestamp | Date;
-  followUpDate?: Timestamp | Date;
 }
 
 export interface Meeting {
@@ -216,4 +207,14 @@ export interface Notification {
   link?: string;
   createdAt: Timestamp | Date;
   userId: string;
+}
+
+export interface Resource {
+  id: string;
+  title: string;
+  link: string;
+  description: string;
+  features: string[];
+  createdAt: Timestamp | Date;
+  createdBy: string;
 }

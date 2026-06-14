@@ -166,7 +166,7 @@ export default function AuditPage() {
                     <input className="input-field" placeholder="What did you work on?" value={item.description} onChange={(e) => updateItem(i, "description", e.target.value)} />
                     <div className="grid grid-cols-3 gap-2">
                       <select className="input-field text-xs" value={item.category} onChange={(e) => updateItem(i, "category", e.target.value)}>
-                        {["Development", "Design", "Meeting", "Review", "Admin", "Learning", "General"].map((c) => <option key={c}>{c}</option>)}
+                        {["Development", "Design", "Marketing", "SEO", "Sales", "Writing", "Meeting", "Review", "Admin", "Learning", "General"].map((c) => <option key={c}>{c}</option>)}
                       </select>
                       <input className="input-field text-xs" placeholder="Time spent" value={item.time || ""} onChange={(e) => updateItem(i, "time", e.target.value)} />
                       <input className="input-field text-xs" placeholder="Notes" value={item.notes || ""} onChange={(e) => updateItem(i, "notes", e.target.value)} />

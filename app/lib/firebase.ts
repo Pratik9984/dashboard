@@ -64,8 +64,6 @@ export {
   Timestamp, onSnapshot,
 };
 
-export const db = getDb();
-export const auth = getFirebaseAuth();
 export default getFirebaseApp();
 
 

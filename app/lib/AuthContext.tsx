@@ -12,15 +12,13 @@ interface AuthContextType {
   profile: TeamMember | null;
   loading: boolean;
   isAdmin: boolean;
-  isOwner: boolean;
-  isManager: boolean;
   isMember: boolean;
-  isViewer: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
   logOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfileState: (data: Partial<TeamMember>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,9 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let role = data.role as UserRole;
         if (!role) {
           role = "member";
-        }
-        if (data.email?.toLowerCase() === "hello@stackandscale.in") {
-          role = "owner";
         }
         const profileData = { id: docId, ...data, role } as TeamMember;
         setProfile(profileData);
@@ -102,25 +97,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const applyTheme = (themeName: string) => {
+      if (themeName === "dark") {
+        document.documentElement.classList.add("dark");
+      } else if (themeName === "light") {
+        document.documentElement.classList.remove("dark");
+      } else {
+        const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (systemDark) {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      }
+    };
+
+    if (profile?.preferences?.theme) {
+      applyTheme(profile.preferences.theme);
+    } else {
+      applyTheme("light");
+    }
+  }, [profile]);
+
   const signIn = async (email: string, password: string) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     await fetchProfile(cred.user.uid, cred.user.email);
   };
 
   const signUp = async (email: string, password: string, name: string, role: UserRole = "member") => {
-    const isOwnerSetup = email.toLowerCase() === "hello@stackandscale.in";
     let existingDoc: any = null;
     let existingDocId = "";
 
-    if (!isOwnerSetup) {
-      const q = query(collection(db, "users"), where("email", "==", email));
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        throw new Error("Only the administrator/owner can add new members. Please contact the owner to register your email.");
-      }
-      existingDoc = snap.docs[0].data();
-      existingDocId = snap.docs[0].id;
+    const q = query(collection(db, "users"), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      throw new Error("Only the administrator/owner can add new members. Please contact the owner to register your email.");
     }
+    existingDoc = snap.docs[0].data();
+    existingDocId = snap.docs[0].id;
 
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
@@ -128,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const p: Omit<TeamMember, "id"> = {
       name: name || existingDoc?.name || "Team Member",
       email,
-      role: isOwnerSetup ? "owner" : (existingDoc?.role || "member"),
+      role: existingDoc?.role || "member",
       department: existingDoc?.department || "General",
       position: existingDoc?.position || "Team Member",
       skills: existingDoc?.skills || [],
@@ -163,14 +180,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (email: string) => sendPasswordResetEmail(auth, email);
   const refreshProfile = async () => { if (user) await fetchProfile(user.uid, user.email); };
 
-  const isOwner = profile?.role === "owner";
-  const isAdmin = profile?.role === "owner" || profile?.role === "admin";
-  const isManager = profile?.role === "manager";
+  const updateProfileState = (data: Partial<TeamMember>) => {
+    setProfile((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...data };
+      if (typeof window !== "undefined") {
+        localStorage.setItem("stackscale_user_profile", JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const isAdmin = profile?.role === "admin";
   const isMember = profile?.role === "member";
-  const isViewer = profile?.role === "viewer";
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isOwner, isManager, isMember, isViewer, signIn, signUp, logOut, resetPassword, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isMember, signIn, signUp, logOut, resetPassword, refreshProfile, updateProfileState }}>
       {children}
     </AuthContext.Provider>
   );

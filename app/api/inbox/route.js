@@ -2,6 +2,7 @@ import { getDb } from '@/app/lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, Timestamp, where } from 'firebase/firestore';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
+import { requireAdmin } from '@/app/lib/firebaseAdmin';
 
 export async function POST(req) {
   const db = getDb();
@@ -156,7 +157,12 @@ export async function POST(req) {
   }
 }
 
-export async function GET() {
+export async function GET(req) {
+  try {
+    await requireAdmin(req);
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 401 });
+  }
   const db = getDb();
   const username = process.env.GMAIL_USER;
   const password = process.env.GMAIL_APP_PASSWORD ? process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, '') : '';

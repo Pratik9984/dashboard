@@ -22,7 +22,7 @@ export default function ResponsesPage() {
   const [filter, setFilter] = useState("all");
   const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "", source: "website" as Response["source"], priority: "medium" as Response["priority"], assignedTo: "" });
 
-  const isRestricted = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const isRestricted = currentUserProfile?.role === "member";
 
   const openAdd = () => { setSelected(null); setForm({ name: "", email: "", phone: "", subject: "", message: "", source: "website", priority: "medium", assignedTo: "" }); setShowModal(true); };
   

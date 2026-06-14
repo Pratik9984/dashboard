@@ -2,26 +2,7 @@ import { UserRole } from "./index";
 
 // Defines pages accessible by each role
 export const PAGE_ACCESS: Record<UserRole, string[]> = {
-  owner: ["*"], // Wildcard meaning all pages
   admin: ["*"],
-  manager: [
-    "/dashboard",
-    "/team",
-    "/projects",
-    "/tasks",
-    "/clients",
-    "/leads",
-    "/responses",
-    "/calls",
-    "/meetings",
-    "/audit",
-    "/analytics",
-    "/sheets",
-    "/emails",
-    "/web3-forms",
-    "/insights",
-    "/pipeline"
-  ],
   member: [
     "/dashboard",
     "/team",
@@ -31,22 +12,9 @@ export const PAGE_ACCESS: Record<UserRole, string[]> = {
     "/leads",
     "/responses",
     "/sheets",
-    "/calls",
     "/meetings",
-    "/audit"
-  ],
-  viewer: [
-    "/dashboard",
-    "/team",
-    "/projects",
-    "/tasks",
-    "/clients",
-    "/leads",
-    "/responses",
-    "/sheets",
-    "/calls",
-    "/meetings",
-    "/audit"
+    "/audit",
+    "/resources"
   ]
 };
 
@@ -56,12 +24,16 @@ export const PAGE_ACCESS: Record<UserRole, string[]> = {
 export function canAccessPage(role: UserRole | undefined, path: string): boolean {
   if (!role) return false;
 
+  const normalizedRole = String(role).toLowerCase().trim();
+  const targetRole: UserRole = (normalizedRole === "owner" || normalizedRole === "manager" || normalizedRole === "admin")
+    ? "admin"
+    : "member";
+
   // Normalize path (strip trailing slashes, ignore query params)
   const cleanPath = path.split("?")[0];
   const normalizedPath = cleanPath === "/" ? "/" : cleanPath.replace(/\/$/, "");
 
-  const allowedPrefixes = PAGE_ACCESS[role];
-  console.log("canAccessPage check: role =", role, "path =", path, "normalizedPath =", normalizedPath, "allowedPrefixes =", allowedPrefixes);
+  const allowedPrefixes = PAGE_ACCESS[targetRole];
   if (!allowedPrefixes) return false;
   if (allowedPrefixes.includes("*")) {
     return true;
@@ -90,47 +62,18 @@ export function canPerformAction(
 ): boolean {
   if (!role) return false;
 
-  // Owner has full access to everything, always
-  if (role === "owner") return true;
+  const normalizedRole = String(role).toLowerCase().trim();
+  const targetRole: UserRole = (normalizedRole === "owner" || normalizedRole === "manager" || normalizedRole === "admin")
+    ? "admin"
+    : "member";
 
-  // Viewer has only read access to allowed pages, never write/delete/create
-  if (role === "viewer") {
-    if (module === "web3forms" || module === "emails") {
-      return false;
-    }
-    return action === "read";
-  }
+  // Admin has full access to everything, always
+  if (targetRole === "admin") return true;
 
-  // --- Users / Team Module ---
-  if (module === "users") {
-    if (role === "admin") {
-      // Admins can view/read all users
-      if (action === "read") return true;
-      
-      // Admins can create team members (but not owner)
-      if (action === "create") {
-        if (!item) return true;
-        return item.role !== "owner";
-      }
-      
-      // Admins cannot update or delete owners or other admins
-      if (action === "update" || action === "delete") {
-        if (!item) return true; // Generic check
-        // Check if target user is owner or admin
-        const targetIsOwnerOrAdmin = item.role === "owner" || item.role === "admin";
-        if (targetIsOwnerOrAdmin) {
-          // If updating own profile, admin is allowed to update their own details (but not change their own role)
-          if (currentUserId && item.id === currentUserId) {
-            return item.role === "admin"; // Can't change own role away from admin, or escalate it
-          }
-          return false;
-        }
-        // Admin can update/delete managers, members, viewers
-        return true;
-      }
-    }
-    
-    if (role === "manager" || role === "member") {
+  // Member permissions
+  if (targetRole === "member") {
+    // --- Users / Team Module ---
+    if (module === "users") {
       if (action === "read") return true;
       if (action === "update") {
         if (!item) return true;
@@ -139,73 +82,42 @@ export function canPerformAction(
       return false;
     }
 
-    // viewer cannot write users
-    return false;
-  }
-
-  // --- Audits Module ---
-  if (module === "audits") {
-    // Owner and admin have full access
-    if (role === "admin") return true;
-
-    // Manager and member can read, create, and update their own audits
-    if (role === "manager" || role === "member") {
-      if (action === "delete") return false; // Only admin/owner can delete audits
-      if (action === "create") return true; // Can create audits
-      if (action === "read" || action === "update") {
-        if (!item) return true; // Generic check
-        return item.createdBy === currentUserId;
-      }
-    }
-    return false;
-  }
-
-  // --- Tasks Module ---
-  if (module === "tasks") {
-    if (role === "admin") return true;
-    if (role === "manager") {
-      return action !== "delete"; // Managers cannot delete tasks
-    }
-    if (role === "member") {
-      if (action === "delete") return false; // Members cannot delete
-      if (action === "create") return true; // Members can create tasks
-      if (action === "read") return true;
-      if (action === "update") {
-        if (!item) return true;
-        // Members can update tasks assigned to them or created by them
-        return item.assignedTo === currentUserId || item.createdBy === currentUserId;
-      }
-    }
-    return false;
-  }
-
-  // --- Calls & Meetings Module ---
-  if (module === "calls" || module === "meetings") {
-    if (role === "admin") return true;
-    if (role === "manager") {
-      return action !== "delete"; // Managers cannot delete
-    }
-    if (role === "member") {
+    // --- Audits Module ---
+    if (module === "audits") {
       if (action === "delete") return false;
       if (action === "create") return true;
-      if (action === "read") return true;
+      if (action === "read" || action === "update") {
+        if (!item) return true;
+        return item.createdBy === currentUserId;
+      }
+      return false;
+    }
+
+    // --- Tasks Module ---
+    if (module === "tasks") {
+      if (action === "delete") return false;
+      if (action === "create" || action === "read") return true;
       if (action === "update") {
         if (!item) return true;
-        // Members can update logs they recorded or created
+        return item.assignedTo === currentUserId || item.createdBy === currentUserId;
+      }
+      return false;
+    }
+
+    // --- Meetings Module ---
+    if (module === "meetings") {
+      if (action === "delete") return false;
+      if (action === "create" || action === "read") return true;
+      if (action === "update") {
+        if (!item) return true;
         const creatorId = item.recordedBy || item.createdBy;
         return creatorId === currentUserId;
       }
+      return false;
     }
-    return false;
-  }
 
-  // --- Sheets Module ---
-  if (module === "sheets") {
-    if (role === "admin") return true;
-    if (role === "manager") {
-      return action !== "delete";
-    }
-    if (role === "member") {
+    // --- Sheets Module ---
+    if (module === "sheets") {
       if (action === "create" || action === "read") return true;
       if (action === "update" || action === "delete") {
         if (!item) return true;
@@ -214,54 +126,48 @@ export function canPerformAction(
         }
         return item.assignedTo === currentUserId || item.createdBy === currentUserId;
       }
+      return false;
     }
-    return false;
-  }
 
-  // --- Projects, Clients, Leads, Responses, Web3-Forms Module ---
-  const standardModules = ["projects", "clients", "leads", "responses", "web3forms", "emails"];
-  if (standardModules.includes(module)) {
-    if (role === "admin") return true;
-    if (role === "manager") {
-      // Manager can read, create, and update standard modules, but NOT delete
-      return action !== "delete";
+    // --- Projects, Clients, Leads, Responses, Web3-Forms, Emails Module ---
+    if (module === "projects") {
+      if (action === "read" || action === "create") return true;
+      if (action === "update") {
+        if (!item) return true;
+        return item.assignees?.includes(currentUserId) || item.createdBy === currentUserId;
+      }
+      return false;
     }
-    if (role === "member") {
-      if (module === "projects") {
-        if (action === "read" || action === "create") return true;
-        if (action === "update") {
-          if (!item) return true;
-          return item.assignees?.includes(currentUserId) || item.createdBy === currentUserId;
-        }
-        return false;
+    if (module === "clients") {
+      if (action === "read" || action === "create") return true;
+      if (action === "update") {
+        if (!item) return true;
+        return item.createdBy === currentUserId;
       }
-      if (module === "clients") {
-        if (action === "read" || action === "create") return true;
-        if (action === "update") {
-          if (!item) return true;
-          return item.createdBy === currentUserId;
-        }
-        return false;
+      return false;
+    }
+    if (module === "leads") {
+      return action === "read" || action === "create" || action === "update";
+    }
+    if (module === "responses") {
+      if (action === "read" || action === "create") return true;
+      if (action === "update") {
+        if (!item) return true;
+        return item.assignedTo === currentUserId;
       }
-      if (module === "leads") {
-        if (action === "read" || action === "create" || action === "update") return true;
-        return false;
-      }
-      if (module === "responses") {
-        if (action === "read" || action === "create") return true;
-        if (action === "update") {
-          if (!item) return true;
-          return item.assignedTo === currentUserId;
-        }
-        return false;
-      }
-      if (module === "web3forms" || module === "emails") {
-        return false;
-      }
-      // Members can only read other standard modules, cannot create, update, or delete
+      return false;
+    }
+    if (module === "resources") {
       return action === "read";
     }
+    if (module === "web3forms" || module === "emails") {
+      return false;
+    }
+
+    // fallback for member on other modules: read-only
+    return action === "read";
   }
 
   return false;
 }
+

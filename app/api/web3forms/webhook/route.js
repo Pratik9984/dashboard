@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/firebase';
+import { getDb } from '@/app/lib/firebase';
 import { collection, addDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 
 const corsHeaders = {

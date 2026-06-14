@@ -50,6 +50,13 @@ export default function TeamPage() {
           toast.error("Unauthorized to edit this user");
           return;
         }
+        if (editing.role === "admin" && form.role !== "admin") {
+          const adminCount = members.filter((m) => m.role === "admin").length;
+          if (adminCount <= 1) {
+            toast.error("You can't remove the last admin.");
+            return;
+          }
+        }
         await update(editing.id, data);
         toast.success("Member updated");
       } else {
@@ -70,6 +77,13 @@ export default function TeamPage() {
     if (!canPerformAction(currentUserProfile?.role, "users", "delete", target)) {
       toast.error("Unauthorized to delete this user");
       return;
+    }
+    if (target.role === "admin") {
+      const adminCount = members.filter((m) => m.role === "admin").length;
+      if (adminCount <= 1) {
+        toast.error("You can't remove the last admin.");
+        return;
+      }
     }
     if (!confirm("Remove this team member?")) return;
     try { await remove(id); toast.success("Member removed"); } catch { toast.error("Failed to remove"); }
@@ -127,8 +141,8 @@ export default function TeamPage() {
                   <div className="flex items-center gap-2 text-slate-500"><MapPin className="w-3.5 h-3.5" /><span>{m.department}</span></div>
                 </div>
                 <div className="flex items-center gap-2 mt-3 flex-wrap">
-                  <span className={`badge ${m.role === "owner" || m.role === "admin" ? "bg-primary-50 text-primary-700 border-primary-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}>
-                    {m.role === "owner" || m.role === "admin" ? <Shield className="w-3 h-3 mr-1" /> : <User className="w-3 h-3 mr-1" />}
+                  <span className={`badge ${m.role === "admin" ? "bg-primary-50 text-primary-700 border-primary-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                    {m.role === "admin" ? <Shield className="w-3 h-3 mr-1" /> : <User className="w-3 h-3 mr-1" />}
                     {m.role}
                   </span>
                   <StatusBadge status={m.isActive ? "active" : "inactive"} />
@@ -152,7 +166,7 @@ export default function TeamPage() {
         <div className="space-y-4">
           <div><label className="label">Name</label><input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><label className="label">Email</label><input className="input-field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Role</label>
               <select 
@@ -161,18 +175,13 @@ export default function TeamPage() {
                 onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
                 disabled={editing?.id === currentUserProfile?.id}
               >
-                {currentUserProfile?.role === "owner" && (
-                  <option value="owner">Owner</option>
-                )}
                 <option value="admin">Admin</option>
-                <option value="manager">Manager</option>
                 <option value="member">Member</option>
-                <option value="viewer">Viewer</option>
               </select>
             </div>
             <div><label className="label">Department</label><input className="input-field" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div><label className="label">Position</label><input className="input-field" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} /></div>
             <div><label className="label">Phone</label><input className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
           </div>

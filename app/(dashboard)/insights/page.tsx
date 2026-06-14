@@ -11,8 +11,10 @@ import {
 import StatsCard from "@/app/components/StatsCard";
 import { CHART_COLORS } from "@/app/lib/data";
 import LoadingSpinner from "@/app/components/LoadingSpinner";
+import { useAuth } from "@/app/lib/AuthContext";
 
 export default function InsightsPage() {
+  const { user } = useAuth();
   const [timeRange, setTimeRange] = useState("30d");
   const [showSetupInstructions, setShowSetupInstructions] = useState(false);
 
@@ -27,7 +29,12 @@ export default function InsightsPage() {
       setGscLoading(true);
       try {
         const limitDays = timeRange === "7d" ? 7 : timeRange === "14d" ? 14 : 30;
-        const res = await fetch(`/api/search-console?days=${limitDays}`);
+        const token = user ? await user.getIdToken() : "";
+        const res = await fetch(`/api/search-console?days=${limitDays}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
         if (!res.ok) {
           const errData = await res.json();
           throw new Error(errData.error || "GSC API returned an error");

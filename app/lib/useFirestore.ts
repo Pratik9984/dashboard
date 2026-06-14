@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   getDb, getFirebaseAuth, collection, doc, addDoc, setDoc, getDoc, getDocs,
-  updateDoc, deleteDoc, query, where, orderBy, limit, Timestamp,
+  updateDoc, deleteDoc, query, where, orderBy, limit, Timestamp, onSnapshot,
 } from "./firebase";
 import { QueryConstraint } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -142,41 +142,55 @@ export function useCollection<T extends { id: string }>(
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
-  const fetchData = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    try {
-      const ref = collection(getDb(), collectionName);
-      // Directly spread the original QueryConstraint objects to prevent corruption
-      const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
-      const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];
-      
-      setCachedCollection(cacheKey, docs);
-      setData(docs);
-      setError(null);
-    } catch (err: any) {
-      console.error(`Error loading collection ${collectionName}:`, err);
-      setError(err.message || "Failed to load collection");
-    } finally {
-      setLoading(false);
-    }
-  }, [collectionName, constraintsKey, cacheKey]);
+  const refresh = useCallback(() => {
+    setTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    // Client-side cache check runs on mount to populate state immediately before repaint
+    // 1. Client-side cache check runs on mount to populate state immediately
     const cachedData = getCachedCollection(cacheKey);
     if (cachedData) {
       setData(cachedData);
       setLoading(false);
-      // Trigger background update (AJAX sync)
-      fetchData(false);
     } else {
-      fetchData(true);
+      setLoading(true);
     }
-  }, [cacheKey, fetchData]);
 
-  return { data, loading, error, refresh: () => fetchData(true) };
+    // 2. Set up real-time listener (onSnapshot)
+    try {
+      const ref = collection(getDb(), collectionName);
+      // Directly spread constraints to build query
+      const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snap) => {
+          const docs = snap.docs.map((d) => ({ ...d.data(), id: d.id })) as T[];
+          setCachedCollection(cacheKey, docs);
+          setData(docs);
+          setLoading(false);
+          setError(null);
+        },
+        (err: any) => {
+          console.error(`Error loading collection ${collectionName} in real-time:`, err);
+          setError(err.message || "Failed to listen to collection updates");
+          setLoading(false);
+        }
+      );
+
+      return () => {
+        unsubscribe();
+      };
+    } catch (err: any) {
+      console.error(`Error setting up onSnapshot for ${collectionName}:`, err);
+      setError(err.message || "Failed to subscribe to collection");
+      setLoading(false);
+    }
+  }, [collectionName, constraintsKey, cacheKey, tick]);
+
+  return { data, loading, error, refresh };
 }
 
 export function useDocument<T>(collectionName: string, docId: string | null) {
@@ -197,7 +211,7 @@ export function useDocument<T>(collectionName: string, docId: string | null) {
     if (showLoading) setLoading(true);
     try {
       const snap = await getDoc(doc(getDb(), collectionName, docId));
-      const docData = snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null;
+      const docData = snap.exists() ? ({ ...snap.data(), id: snap.id } as T) : null;
       
       setCachedDocument(cacheKey, docData);
       setData(docData);
@@ -268,7 +282,7 @@ export function useFirestore(collectionName: string) {
   const get = useCallback(
     async <T>(id: string) => {
       const snap = await getDoc(doc(getDb(), collectionName, id));
-      return snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null;
+      return snap.exists() ? ({ ...snap.data(), id: snap.id } as T) : null;
     },
     [collectionName]
   );
@@ -278,7 +292,7 @@ export function useFirestore(collectionName: string) {
       const ref = collection(getDb(), collectionName);
       const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
       const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];
+      return snap.docs.map((d) => ({ ...d.data(), id: d.id })) as T[];
     },
     [collectionName]
   );
@@ -287,7 +301,7 @@ export function useFirestore(collectionName: string) {
 }
 
 export function useDashboardStats() {
-  const { profile, isAdmin, isManager } = useAuth();
+  const { profile, isAdmin } = useAuth();
   const currentUserId = profile?.id || "";
   const currentUserName = profile?.name || "";
 
@@ -301,8 +315,8 @@ export function useDashboardStats() {
   const { data: sheets, loading: lsh } = useCollection<any>("sheets");
 
   const stats = useMemo(() => {
-    // If not admin/owner/manager, filter data down to user's assigned scope
-    const isRestricted = !isAdmin && !isManager;
+    // If not admin, filter data down to user's assigned scope
+    const isRestricted = !isAdmin;
 
     const filteredProjects = isRestricted
       ? projects.filter((p) => p.assignees?.includes(currentUserId) || p.createdBy === currentUserId)
@@ -365,7 +379,7 @@ export function useDashboardStats() {
       newLeads,
       totalRevenue,
     };
-  }, [projects, clients, responses, meetings, users, leads, tasks, sheets, isAdmin, isManager, currentUserId, currentUserName]);
+  }, [projects, clients, responses, meetings, users, leads, tasks, sheets, isAdmin, currentUserId, currentUserName]);
 
   const loading = lp || lc || lr || lm || lu || lpi || lt || lsh;
 

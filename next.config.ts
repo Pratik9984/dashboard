@@ -1,10 +1,14 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
   images: {
     domains: ["lh3.googleusercontent.com", "firebasestorage.googleapis.com"],
   },
+  serverExternalPackages: ["imapflow", "mailparser"],
   experimental: {
-    serverComponentsExternalPackages: ["imapflow", "mailparser"],
+    optimizePackageImports: ["lucide-react", "recharts", "googleapis", "date-fns"],
+    serverComponentsHmrCache: true,
   },
 };
-module.exports = nextConfig;
+
+export default nextConfig;

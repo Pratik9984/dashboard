@@ -1,10 +1,17 @@
-import { getDb } from '@/lib/firebase';
+import { getDb } from '@/app/lib/firebase';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { Resend } from 'resend';
+import { requireAdmin } from '@/app/lib/firebaseAdmin';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 export async function POST(req) {
+  try {
+    await requireAdmin(req);
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 401 });
+  }
+
   const db = getDb();
   try {
     const { to, cc, subject, body, html, attachments, threadId } = await req.json();

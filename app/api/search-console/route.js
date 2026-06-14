@@ -1,6 +1,13 @@
 import { google } from 'googleapis';
+import { requireAdmin } from '@/app/lib/firebaseAdmin';
 
 export async function GET(request) {
+  try {
+    await requireAdmin(request);
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '30', 10);

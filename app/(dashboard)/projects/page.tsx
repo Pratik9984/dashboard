@@ -88,7 +88,7 @@ export default function ProjectsPage() {
     try { await remove(id); toast.success("Project deleted"); } catch { toast.error("Failed to delete"); }
   };
 
-  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const isMemberOrViewer = currentUserProfile?.role === "member";
   const userProjects = isMemberOrViewer
     ? projects.filter((p) => p.assignees?.includes(currentUserProfile?.id || "") || p.createdBy === currentUserProfile?.id)
     : projects;

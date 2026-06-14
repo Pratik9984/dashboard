@@ -121,3 +121,192 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* Dark Mode Theme Overrides */
+.dark, .dark body {
+  background-color: #0f172a !important; /* Slate 900 */
+  color: #f8fafc !important; /* Slate 50 */
+}
+
+/* Base structural containers */
+.dark header {
+  background-color: #1e293b !important; /* Slate 800 */
+  border-color: #334155 !important; /* Slate 700 */
+}
+.dark aside {
+  background-color: #1e293b !important; /* Slate 800 */
+  border-color: #334155 !important; /* Slate 700 */
+}
+
+/* Background utilities */
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+.dark .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+.dark .bg-slate-50\/50 {
+  background-color: #0f172a !important;
+}
+.dark .bg-slate-50\/80 {
+  background-color: #1e293b !important;
+}
+.dark .bg-slate-100 {
+  background-color: #334155 !important; /* Slate 700 */
+}
+.dark .bg-slate-200 {
+  background-color: #475569 !important; /* Slate 600 */
+}
+
+/* Text overrides */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  color: #f1f5f9 !important; /* Slate 100 */
+}
+.dark .text-slate-600 {
+  color: #cbd5e1 !important; /* Slate 300 */
+}
+.dark .text-slate-500 {
+  color: #94a3b8 !important; /* Slate 400 */
+}
+.dark .text-slate-400 {
+  color: #64748b !important; /* Slate 500 */
+}
+
+/* Primary color text mappings */
+.dark .text-primary-600,
+.dark .text-primary-700 {
+  color: #818cf8 !important; /* Indigo 400 */
+}
+
+/* Status overlays & badges */
+.dark .bg-primary-50 { background-color: rgba(99, 102, 241, 0.15) !important; }
+.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.15) !important; }
+.dark .text-emerald-700 { color: #34d399 !important; }
+.dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3) !important; }
+
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.15) !important; }
+.dark .text-blue-700 { color: #60a5fa !important; }
+.dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.3) !important; }
+
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.15) !important; }
+.dark .text-red-700, .dark .text-red-600 { color: #f87171 !important; }
+.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.3) !important; }
+
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.15) !important; }
+.dark .text-amber-700 { color: #fbbf24 !important; }
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.3) !important; }
+
+.dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.15) !important; }
+.dark .text-violet-700 { color: #a78bfa !important; }
+.dark .border-violet-200 { border-color: rgba(139, 92, 246, 0.3) !important; }
+
+.dark .bg-cyan-50 { background-color: rgba(6, 182, 212, 0.15) !important; }
+.dark .text-cyan-700 { color: #22d3ee !important; }
+.dark .border-cyan-200 { border-color: rgba(6, 182, 212, 0.3) !important; }
+
+.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.15) !important; }
+.dark .text-rose-600 { color: #fb7185 !important; }
+.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.3) !important; }
+
+/* Borders */
+.dark .border-slate-200,
+.dark .border-slate-100 {
+  border-color: #334155 !important;
+}
+.dark .border-slate-300 {
+  border-color: #475569 !important;
+}
+
+/* Hover effects */
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-slate-200:hover {
+  background-color: #334155 !important;
+}
+.dark .group:hover {
+  background-color: #334155 !important;
+}
+.dark .hover\:text-slate-900:hover {
+  color: #f8fafc !important;
+}
+
+/* Form inputs & buttons */
+.dark .input-field {
+  background-color: #1e293b !important;
+  border-color: #475569 !important;
+  color: #f8fafc !important;
+}
+.dark .input-field.bg-slate-50 {
+  background-color: #0f172a !important;
+}
+.dark .input-field::placeholder {
+  color: #475569 !important;
+}
+.dark .label {
+  color: #cbd5e1 !important;
+}
+.dark .btn-secondary {
+  background-color: #1e293b !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+}
+.dark .btn-secondary:hover {
+  background-color: #334155 !important;
+}
+
+/* Card components */
+.dark .card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+.dark .card-hover {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+.dark .card-hover:hover {
+  border-color: #475569 !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Table overrides */
+.dark .table-header {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+.dark .table-cell {
+  color: #cbd5e1 !important;
+  border-color: #334155 !important;
+}
+
+/* Scrollbar dark mode support */
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Modal dark overrides */
+.dark .relative.bg-white {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+.dark .border-b.border-slate-100,
+.dark .border-t.border-slate-100 {
+  border-color: #334155 !important;
+}
+
+/* Recharts overrides in dark mode */
+.dark .recharts-cartesian-grid-line line {
+  stroke: #334155 !important;
+}
+.dark .recharts-default-tooltip {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  border-radius: 12px !important;
+}
+.dark .recharts-tooltip-item {
+  color: #cbd5e1 !important;
+}

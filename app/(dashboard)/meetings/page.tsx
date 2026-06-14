@@ -71,7 +71,7 @@ export default function MeetingsPage() {
     try { await remove(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
 
-  const isMemberOrViewer = currentUserProfile?.role === "member" || currentUserProfile?.role === "viewer";
+  const isMemberOrViewer = currentUserProfile?.role === "member";
   const userMeetings = isMemberOrViewer
     ? meetings.filter((m) => {
         return m.createdBy === currentUserProfile?.id ||

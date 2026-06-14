@@ -120,21 +120,6 @@ function mapRowToSchema(row: Record<string, any>, type: string) {
     };
   }
 
-  if (type === "calls") {
-    return {
-      contactName: String(getVal(["contactname", "name", "customer"], "Unnamed Contact")).trim(),
-      contactEmail: String(getVal(["contactemail", "email"], "")).trim(),
-      contactPhone: String(getVal(["contactphone", "phone", "number"], "")).trim(),
-      type: String(getVal(["type", "calltype", "medium"], "call")).trim() as any,
-      direction: String(getVal(["direction", "calldirection"], "outbound")).trim() as any,
-      status: String(getVal(["status", "callstatus"], "completed")).trim() as any,
-      duration: Number(getVal(["duration", "seconds", "length"], 0)) || 0,
-      notes: String(getVal(["notes", "summary", "details"], "")).trim(),
-      recordedBy: String(getVal(["recordedby", "agent", "user"], "admin")).trim(),
-      date: new Date(getVal(["date", "time", "timestamp"], new Date())),
-    };
-  }
-
   return null;
 }
 
@@ -143,8 +128,8 @@ export default function SheetsPage() {
   const { data: sheets, loading } = useCollection<SheetData>("sheets");
   const { data: users } = useCollection<TeamMember>("users");
   const { add, update, remove } = useFirestore("sheets");
-  const { profile: currentUserProfile, isAdmin, isManager } = useAuth();
-  const isRestricted = !isAdmin && !isManager;
+  const { profile: currentUserProfile, isAdmin } = useAuth();
+  const isRestricted = !isAdmin;
 
   // Instantiated collection writers for data transfers
   const firestoreClients = useFirestore("clients");
@@ -152,7 +137,6 @@ export default function SheetsPage() {
   const firestoreLeads = useFirestore("leads");
   const firestoreResponses = useFirestore("responses");
   const firestoreTasks = useFirestore("tasks");
-  const firestoreCalls = useFirestore("calls");
 
   const [showModal, setShowModal] = useState(false);
   const [editingSheet, setEditingSheet] = useState<SheetData | null>(null);
@@ -350,7 +334,7 @@ export default function SheetsPage() {
             sheetName: sheet.name,
             createdAt: Timestamp.now(),
           };
-          if (sheet.type === "leads" && sheet.assignedTo) {
+          if (sheet.type === "leads") {
             docData.assignedTo = assigneeName;
           }
           batch.set(docRef, docData);
@@ -628,7 +612,7 @@ export default function SheetsPage() {
           <div><label className="label">Description</label><input className="input-field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="label">Type</label><select className="input-field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as SheetData["type"] })}>
-              <option value="custom">Custom</option><option value="projects">Projects</option><option value="clients">Clients</option><option value="leads">Leads</option><option value="responses">Responses</option><option value="tasks">Tasks</option><option value="calls">Calls</option>
+              <option value="custom">Custom</option><option value="projects">Projects</option><option value="clients">Clients</option><option value="leads">Leads</option><option value="responses">Responses</option><option value="tasks">Tasks</option>
             </select></div>
             <div>
               <label className="label">Assigned To</label>
@@ -720,7 +704,6 @@ export default function SheetsPage() {
                 <option value="clients">Clients</option>
                 <option value="projects">Projects</option>
                 <option value="tasks">Tasks</option>
-                <option value="calls">Calls</option>
                 <option value="responses">Form Responses</option>
               </select>
             </div>

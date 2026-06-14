@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && role() == 'admin';
+    }
+
+    // users collection
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        request.auth.uid == uid && 
+        request.resource.data.role == resource.data.role
+      );
+    }
+    
+    // projects collection
+    match /projects/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || (
+        resource.data.createdBy == request.auth.uid || 
+        request.auth.uid in resource.data.assignees
+      );
+      allow delete: if isAdmin();
+    }
+    
+    // clients collection
+    match /clients/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    
+    // leads collection
+    match /leads/{id} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+    
+    // responses collection
+    match /responses/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || resource.data.assignedTo == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    
+    // tasks collection
+    match /tasks/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || (
+        resource.data.assignedTo == request.auth.uid || 
+        resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isAdmin();
+    }
+    
+
+    // meetings collection
+    match /meetings/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    
+    // sheets collection
+    match /sheets/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || (
+        resource.data.assignedTo == request.auth.uid || 
+        resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isAdmin() || resource.data.createdBy == request.auth.uid;
+    }
+    
+    // audits collection
+    match /audits/{id} {
+      allow create: if isSignedIn();
+      allow read, update: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    
+    // resources collection
+    match /resources/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // emails, web3forms, insights
+    match /emails/{id} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /web3forms/{id} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /insights/{id} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

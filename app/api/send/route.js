@@ -1,8 +1,15 @@
 import { Resend } from 'resend';
+import { requireAdmin } from '@/app/lib/firebaseAdmin';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 export async function POST(req) {
+  try {
+    await requireAdmin(req);
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 401 });
+  }
+
   const { to, subject, body, html, attachments } = await req.json();
 
   if (!resend) {

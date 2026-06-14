@@ -39,7 +39,7 @@ import toast from "react-hot-toast";
 type EmailFolder = "inbox" | "sent" | "drafts" | "starred" | "trash";
 
 export default function EmailsPage() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const userEmail = profile?.email || "hello@stackandscale.in";
 
   // Use collection hook with real-time updates and date ordering
@@ -265,9 +265,13 @@ export default function EmailsPage() {
         payload.threadId = replyToId;
       }
 
+      const token = user ? await user.getIdToken() : "";
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify(payload)
       });
 
@@ -321,11 +325,15 @@ export default function EmailsPage() {
     }
   };
 
-  // Fetch and sync new inbound messages from API
   const syncInbox = useCallback(async () => {
     setSyncing(true);
     try {
-      const res = await fetch("/api/inbox");
+      const token = user ? await user.getIdToken() : "";
+      const res = await fetch("/api/inbox", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to sync inbox");
@@ -337,7 +345,7 @@ export default function EmailsPage() {
     } finally {
       setSyncing(false);
     }
-  }, []);
+  }, [user]);
 
   // Compute folder-specific emails and apply search filter
   const processedEmails = useMemo(() => {
@@ -459,11 +467,37 @@ export default function EmailsPage() {
         </div>
       </div>
 
+      {/* Mobile Folder Selector Tabs */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden no-scrollbar">
+        {(["inbox", "starred", "sent", "drafts", "trash"] as EmailFolder[]).map((folder) => {
+          const isActive = activeFolder === folder;
+          const count = folder === "inbox" ? counts.inboxUnread : folder === "drafts" ? counts.drafts : folder === "starred" ? counts.starred : 0;
+          return (
+            <button
+              key={folder}
+              onClick={() => { setActiveFolder(folder); setSelected(null); }}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+                isActive
+                  ? "bg-primary-600 text-white shadow-sm"
+                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <span className="capitalize">{folder}</span>
+              {count > 0 && (
+                <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-full ${isActive ? "bg-white text-primary-600" : "bg-primary-50 text-primary-600"}`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Main Layout Area */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
         
         {/* Navigation Sidebar Pane */}
-        <div className="lg:col-span-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between overflow-y-auto">
+        <div className="hidden lg:flex lg:col-span-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex-col justify-between overflow-y-auto">
           <div className="space-y-1">
             <button onClick={() => { setActiveFolder("inbox"); setSelected(null); }} className={getFolderClasses("inbox")}>
               <div className="flex items-center gap-3">
@@ -522,7 +556,7 @@ export default function EmailsPage() {
         </div>
 
         {/* Middle Pane: Email List */}
-        <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-0">
+        <div className={`lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-sm flex-col min-h-0 ${selected ? "hidden lg:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800 capitalize">{activeFolder}</h3>
             <span className="text-xs text-slate-400">{processedEmails.length} messages</span>
@@ -646,13 +680,22 @@ export default function EmailsPage() {
         </div>
 
         {/* Right Pane: Reading Pane / Detail View */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-0">
+        <div className={`lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm flex-col min-h-0 ${selected ? "flex" : "hidden lg:flex"}`}>
           {selected ? (
             <div className="flex-1 flex flex-col min-h-0">
               
               {/* Header Actions */}
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-slate-50/50 rounded-t-2xl">
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="p-1.5 -ml-1.5 rounded-lg text-slate-500 hover:bg-slate-200 lg:hidden flex items-center gap-1 mr-1"
+                    title="Back to list"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span className="text-xs font-semibold">Back</span>
+                  </button>
+
                   <button
                     onClick={() => handleToggleStar({ stopPropagation: () => {} } as any, selected)}
                     className={`p-1.5 rounded-lg border hover:bg-white text-slate-400 hover:text-amber-500 transition-colors ${
