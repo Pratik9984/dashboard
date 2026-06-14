@@ -215,6 +215,7 @@ export interface Resource {
   link: string;
   description: string;
   features: string[];
+  type?: "prototype" | "pdf";
   createdAt: Timestamp | Date;
   createdBy: string;
 }
