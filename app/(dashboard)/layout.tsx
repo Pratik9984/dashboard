@@ -25,7 +25,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
 };
 
 import { useCollection } from "@/app/lib/useFirestore";
-import { canAccessPage, PAGE_ACCESS } from "@/app/lib/permissions";
+import { canAccessPage } from "@/app/lib/permissions";
 import { ShieldAlert } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   getDb, getFirebaseAuth, collection, doc, addDoc, setDoc, getDoc, getDocs,
-  updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot, Timestamp,
+  updateDoc, deleteDoc, query, where, orderBy, limit, Timestamp,
 } from "./firebase";
 import { QueryConstraint } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -73,40 +73,10 @@ function setCachedDocument(key: string, data: any) {
   }
 }
 
-interface SharedListener {
-  unsub: () => void;
-  subscribers: Set<(data: any) => void>;
-  errorSubscribers: Set<(err: string) => void>;
-  data: any;
-  loading: boolean;
-  error: string | null;
-}
-
-const activeCollectionListeners: Record<string, SharedListener> = {};
-const activeDocumentListeners: Record<string, SharedListener> = {};
-
-// Clean up listeners and localStorage cache on logout
+// Clean up localStorage cache on logout
 if (typeof window !== "undefined") {
   onAuthStateChanged(getFirebaseAuth(), (user) => {
     if (!user) {
-      Object.keys(activeCollectionListeners).forEach((key) => {
-        try {
-          activeCollectionListeners[key].unsub();
-        } catch (e) {
-          console.error("Error cleaning up collection listener:", e);
-        }
-        delete activeCollectionListeners[key];
-      });
-
-      Object.keys(activeDocumentListeners).forEach((key) => {
-        try {
-          activeDocumentListeners[key].unsub();
-        } catch (e) {
-          console.error("Error cleaning up document listener:", e);
-        }
-        delete activeDocumentListeners[key];
-      });
-
       statsCache = null;
       Object.keys(collectionCache).forEach((key) => delete collectionCache[key]);
       Object.keys(documentCache).forEach((key) => delete documentCache[key]);
