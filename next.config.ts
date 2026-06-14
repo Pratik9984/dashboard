@@ -4,9 +4,9 @@ const nextConfig: NextConfig = {
   images: {
     domains: ["lh3.googleusercontent.com", "firebasestorage.googleapis.com"],
   },
-  serverExternalPackages: ["imapflow", "mailparser"],
+  serverExternalPackages: ["imapflow", "mailparser", "googleapis"],
   experimental: {
-    optimizePackageImports: ["lucide-react", "recharts", "googleapis", "date-fns"],
+    optimizePackageImports: ["lucide-react", "recharts", "date-fns"],
     serverComponentsHmrCache: true,
   },
 };

@@ -36,8 +36,14 @@ export default function InsightsPage() {
           }
         });
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || "GSC API returned an error");
+          let errMsg = "GSC API returned an error";
+          try {
+            const errData = await res.json();
+            errMsg = errData.error || errMsg;
+          } catch {
+            errMsg = `Server Error: ${res.status} ${res.statusText}`;
+          }
+          throw new Error(errMsg);
         }
         const data = await res.json();
         setGscData(data);

@@ -5,8 +5,15 @@ import {
   collection, doc, addDoc, setDoc,
   getDoc, getDocs, updateDoc, deleteDoc, query, where,
   orderBy, limit, Timestamp, onSnapshot, Firestore,
+  setLogLevel,
 } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
+
+// Silence internal Firebase SDK logs on the client side to avoid triggering
+// Next.js development console-error fullscreen overlays for harmless logs (e.g. multi-tab leases)
+if (typeof window !== "undefined") {
+  setLogLevel("silent");
+}
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
