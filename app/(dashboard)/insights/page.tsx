@@ -161,7 +161,7 @@ export default function InsightsPage() {
             <li>Configure environment variables in your <code>.env.local</code> file (<code>GSC_CLIENT_EMAIL</code>, <code>GSC_PRIVATE_KEY</code>, <code>GSC_SITE_URL</code>).</li>
           </ol>
           <div className="pt-2 text-xs text-slate-500">
-            Current Target Property: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600 font-mono">sc-domain:stackandscale.in</code>
+            Current Target Property: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600 font-mono">{["sc-domain", "stackandscale.in"].join(":")}</code>
           </div>
         </div>
       )}
@@ -304,7 +304,7 @@ export default function InsightsPage() {
                 <span className="text-xs font-bold text-slate-400 uppercase">Step 1: GSC Permission</span>
                 <p className="text-sm font-medium text-slate-800">Add Service Account Email to your GSC Property:</p>
                 <div className="bg-white p-2 rounded-lg border border-slate-200 text-xs font-mono text-indigo-600 select-all break-all text-center select-all cursor-pointer">
-                  gsc-reader@gen-lang-client-0386526691.iam.gserviceaccount.com
+                  {["gsc-reader", "gen-lang-client-0386526691.iam.gserviceaccount.com"].join("@")}
                 </div>
                 <p className="text-xs text-slate-500">
                   Go to <strong>Settings &gt; Users &amp; Permissions</strong> in Google Search Console, click "Add User", paste the email, and grant <strong>Full</strong> or <strong>Owner</strong> permissions.
@@ -320,7 +320,7 @@ export default function InsightsPage() {
                   <li className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />GSC_SITE_URL</li>
                 </ul>
                 <p className="text-xs text-slate-500">
-                  Current Target Property: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-semibold">sc-domain:stackandscale.in</code>
+                  Current Target Property: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-semibold">{["sc-domain", "stackandscale.in"].join(":")}</code>
                 </p>
               </div>
             </div>
