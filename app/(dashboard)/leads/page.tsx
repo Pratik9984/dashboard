@@ -410,18 +410,18 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button onClick={() => setView("board")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "board" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Board</button>
-            <button onClick={() => setView("list")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "list" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>List</button>
-            <button onClick={() => setView("analysis")} className={`px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "analysis" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Analysis</button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            <button onClick={() => setView("board")} className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "board" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Board</button>
+            <button onClick={() => setView("list")} className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "list" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>List</button>
+            <button onClick={() => setView("analysis")} className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-sm font-medium ${view === "analysis" ? "bg-primary-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Analysis</button>
           </div>
           
           <select
             value={selectedSheet}
             onChange={(e) => setSelectedSheet(e.target.value)}
-            className="px-3.5 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none font-medium text-slate-600 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+            className="w-full sm:w-auto px-3.5 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none font-medium text-slate-600 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
           >
             <option value="all">All Sheets</option>
             <option value="manual">Manually Created</option>
@@ -432,18 +432,18 @@ export default function LeadsPage() {
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
           {filteredLeads.length > 0 && canPerformAction(currentUserProfile?.role, "leads", "delete") && (
             <button
               onClick={handleClearAll}
               disabled={clearing}
-              className="px-3.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 w-full sm:w-auto"
             >
               <Trash2 className="w-4 h-4" /> Clear Filtered Leads
             </button>
           )}
           {canPerformAction(currentUserProfile?.role, "leads", "create") && (
-            <button onClick={openAdd} className="btn-primary"><Plus className="w-4 h-4" /> Add Lead</button>
+            <button onClick={openAdd} className="btn-primary w-full sm:w-auto justify-center"><Plus className="w-4 h-4" /> Add Lead</button>
           )}
         </div>
       </div>

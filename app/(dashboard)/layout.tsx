@@ -21,6 +21,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/emails": { title: "Emails", subtitle: "Email communication records" },
   "/web3-forms": { title: "Web3 Forms", subtitle: "Form submission responses" },
   "/insights": { title: "Insights", subtitle: "Website analytics and traffic" },
+  "/billing": { title: "Billing & Expenses", subtitle: "Manage invoices, bills, and ledger history" },
 };
 
 import { canAccessPage } from "@/app/lib/permissions";
@@ -64,7 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           subtitle={isAuthorized ? pageInfo.subtitle : ""}
           onToggleMobile={() => setMobileOpen(!mobileOpen)}
         />
-        <main className="p-6">
+        <main className="p-4 sm:p-6">
           {isAuthorized ? (
             children
           ) : (

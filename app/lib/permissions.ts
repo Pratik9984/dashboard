@@ -14,7 +14,8 @@ export const PAGE_ACCESS: Record<UserRole, string[]> = {
     "/sheets",
     "/meetings",
     "/audit",
-    "/resources"
+    "/resources",
+    "/billing"
   ]
 };
 
@@ -154,6 +155,14 @@ export function canPerformAction(
       if (action === "update") {
         if (!item) return true;
         return item.assignedTo === currentUserId;
+      }
+      return false;
+    }
+    if (module === "invoices" || module === "bills") {
+      if (action === "read" || action === "create") return true;
+      if (action === "update") {
+        if (!item) return true;
+        return item.createdBy === currentUserId;
       }
       return false;
     }

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, Building2,
   GitBranch, MessageSquare, Phone, CalendarDays, ClipboardCheck,
   BarChart3, Sheet, Mail, Globe, TrendingUp, ChevronLeft,
-  ChevronRight, LogOut, Layers, BookOpen,
+  ChevronRight, LogOut, Layers, BookOpen, Receipt,
 } from "lucide-react";
 import { useAuth } from "@/app/lib/AuthContext";
 import { canAccessPage } from "@/app/lib/permissions";
@@ -27,7 +27,9 @@ const NAV_ITEMS = [
   { label: "Web3 Forms", href: "/web3-forms", icon: Globe },
   { label: "Insights", href: "/insights", icon: TrendingUp },
   { label: "Resources", href: "/resources", icon: BookOpen },
+  { label: "Billing", href: "/billing", icon: Receipt },
 ];
+
 
 interface SidebarProps {
   collapsed: boolean;

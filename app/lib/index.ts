@@ -219,3 +219,68 @@ export interface Resource {
   createdAt: Timestamp | Date;
   createdBy: string;
 }
+
+export interface InvoiceItem {
+  description: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  clientId: string;
+  clientName: string;
+  clientEmail?: string;
+  clientAddress?: string;
+  clientGstOrVat?: string;
+  status: "paid" | "unpaid" | "overdue" | "draft" | "cancelled" | "proposal";
+  issueDate: Timestamp | Date;
+  dueDate: Timestamp | Date;
+  items: InvoiceItem[];
+  subtotal: number;
+  taxRate: number; // percentage
+  taxAmount: number;
+  discountAmount?: number;
+  total: number;
+  paymentMethod?: string;
+  notes?: string;
+  createdAt: Timestamp | Date;
+  createdBy: string;
+  updatedAt?: Timestamp | Date;
+  projectId?: string;
+  projectName?: string;
+}
+
+export interface BillItem {
+  description: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+}
+
+export interface Bill {
+  id: string;
+  billNumber: string;
+  vendorName: string;
+  vendorEmail?: string;
+  vendorPhone?: string;
+  category: string;
+  status: "paid" | "unpaid" | "overdue" | "draft" | "proposal";
+  issueDate: Timestamp | Date;
+  dueDate: Timestamp | Date;
+  items: BillItem[];
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  paymentMethod?: string;
+  notes?: string;
+  createdAt: Timestamp | Date;
+  createdBy: string;
+  updatedAt?: Timestamp | Date;
+  projectId?: string;
+  projectName?: string;
+}
+

@@ -310,3 +310,105 @@ body {
 .dark .recharts-tooltip-item {
   color: #cbd5e1 !important;
 }
+
+/* Mobile Responsiveness Overrides */
+@media (max-w: 640px) {
+  /* 1. Grid Column Stacking overrides */
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  /* 2. Top Page Toolbars and Action Headers */
+  .space-y-6 > .flex.items-center.justify-between,
+  .space-y-6 > .flex.justify-between,
+  main > div > .flex.items-center.justify-between,
+  main .flex.items-center.justify-between:not(.card .flex):not(header .flex):not(.modal .flex):not(.table-cell .flex) {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.875rem !important;
+  }
+
+  /* Wrap flex groupings inside toolbars to align side-by-side or stack */
+  .space-y-6 > .flex.items-center.justify-between > .flex,
+  .space-y-6 > .flex.justify-between > .flex,
+  main .flex.items-center.justify-between > .flex:not(.card .flex):not(header .flex):not(.modal .flex) {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  /* Force buttons and select dropdowns inside mobile headers to grow and center */
+  .space-y-6 > .flex.items-center.justify-between button,
+  .space-y-6 > .flex.items-center.justify-between select,
+  .space-y-6 > .flex.justify-between button,
+  .space-y-6 > .flex.justify-between select,
+  main .flex.items-center.justify-between button,
+  main .flex.items-center.justify-between select {
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    justify-content: center !important;
+    width: auto !important;
+  }
+
+  /* DataTable search and actions toolbar responsive styling */
+  .card .flex-col.sm\:flex-row.sm\:items-center.sm\:justify-between {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+    padding: 0.875rem !important;
+  }
+
+  .card .flex-col.sm\:flex-row.sm\:items-center.sm\:justify-between > div.relative.w-full.sm\:max-w-sm {
+    width: 100% !important;
+    max-w: none !important;
+  }
+
+  .card .flex-col.sm\:flex-row.sm\:items-center.sm\:justify-between > button,
+  .card .flex-col.sm\:flex-row.sm\:items-center.sm\:justify-between > div.flex {
+    width: 100% !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+  }
+
+  /* 3. Modal adjustments */
+  .modal .relative.bg-white {
+    margin-left: 0.75rem !important;
+    margin-right: 0.75rem !important;
+    max-height: 95vh !important;
+  }
+
+  .modal .px-6.py-4 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 0.875rem !important;
+    padding-bottom: 0.875rem !important;
+  }
+
+  .modal footer.flex {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+
+  .modal footer.flex button {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  /* 4. Other layout widgets */
+  .stats-card, .card {
+    padding: 1rem !important;
+  }
+
+  /* Recharts legends/labels wrap cleanly */
+  .recharts-legend-wrapper {
+    position: relative !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    font-size: 11px !important;
+  }
+}

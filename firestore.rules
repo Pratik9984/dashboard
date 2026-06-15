@@ -94,6 +94,21 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
     }
+
+    // invoices collection
+    match /invoices/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // bills collection
+    match /bills/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     
     // emails, web3forms, insights
     match /emails/{id} {
